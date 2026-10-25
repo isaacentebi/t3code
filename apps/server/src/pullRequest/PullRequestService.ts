@@ -2956,7 +2956,7 @@ export const make = Effect.gen(function* () {
     return Cache.get(listCache, key).pipe(
       Effect.catchCauseIf(
         (cause) => Cause.hasInterruptsOnly(cause),
-        (cause) => Cache.get(listCache, key),
+        (_cause) => Cache.get(listCache, key),
       ),
     );
   };
@@ -3388,7 +3388,7 @@ export const make = Effect.gen(function* () {
     const { result, at } = yield* Cache.get(listStatsCache, key).pipe(
       Effect.catchCauseIf(
         (cause) => Cause.hasInterruptsOnly(cause),
-        (cause) => Cache.get(listStatsCache, key),
+        (_cause) => Cache.get(listStatsCache, key),
       ),
     );
     for (const [key, ref] of missing) {

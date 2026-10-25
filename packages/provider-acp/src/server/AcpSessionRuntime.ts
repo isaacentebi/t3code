@@ -2581,7 +2581,7 @@ export const make = Effect.fn("AcpSessionRuntime.make")(function* (
               Effect.catchCauseIf(
                 (cause) =>
                   options.cancelBehavior !== "wait-for-prompt" && Cause.hasInterruptsOnly(cause),
-                (cause) =>
+                (_cause) =>
                   Effect.succeed({
                     stopReason: "cancelled",
                   } satisfies EffectAcpSchema.PromptResponse),

@@ -165,7 +165,7 @@ const takeFrame = (frames: Queue.Queue<OrchestrationV2CommandOutputFrame | "ende
   Queue.take(frames).pipe(
     Effect.filterOrElse(
       (frame) => !(frame === "ended"),
-      (frame) => Effect.die("command output stream ended early"),
+      (_frame) => Effect.die("command output stream ended early"),
     ),
   );
 

@@ -42,7 +42,7 @@ export const initializeV2Database = Effect.fn("initializeV2Database")(function* 
     yield* fs.link(snapshotPath, destinationPath).pipe(
       Effect.catchIf(
         (error) => error.reason._tag === "AlreadyExists",
-        (error) => Effect.void,
+        (_error) => Effect.void,
       ),
     );
   }).pipe(

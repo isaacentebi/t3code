@@ -37,7 +37,7 @@ export const isCheckpointRestoreIsolated = Effect.fn("orchestrationV2.isCheckpoi
         fileSystem.realPath(target).pipe(
           Effect.catchIf(
             (error) => error.reason._tag === "NotFound",
-            (error) => Effect.succeed(path.resolve(target)),
+            (_error) => Effect.succeed(path.resolve(target)),
           ),
         );
       const cwd = yield* resolve(scope.cwd);
@@ -74,7 +74,7 @@ export const isCheckpointRestoreIsolated = Effect.fn("orchestrationV2.isCheckpoi
             const otherCwd = yield* fileSystem.realPath(candidate).pipe(
               Effect.catchIf(
                 (error) => error.reason._tag === "NotFound",
-                (error) => Effect.succeed(null),
+                (_error) => Effect.succeed(null),
               ),
             );
             if (otherCwd !== null && (contains(cwd, otherCwd) || contains(otherCwd, cwd))) {

@@ -710,7 +710,7 @@ const make = Effect.gen(function* () {
       Effect.filterOrFail(
         (projection) =>
           projection.thread.projectId === input.projectId && projection.thread.deletedAt === null,
-        (projection) =>
+        (_projection) =>
           new ThreadManagementThreadNotFoundError({
             projectId: input.projectId,
             threadId: input.threadId,
@@ -736,7 +736,7 @@ const make = Effect.gen(function* () {
       Effect.filterOrFail(
         (projection) =>
           projection.thread.projectId === input.projectId && projection.thread.deletedAt === null,
-        (projection) =>
+        (_projection) =>
           new ThreadManagementThreadNotFoundError({
             projectId: input.projectId,
             threadId: input.threadId,
