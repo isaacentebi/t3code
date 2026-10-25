@@ -2222,10 +2222,10 @@ export const make = Effect.fn("AcpSessionRuntime.make")(function* (
       );
     }
     const { sessionId, sessionSetupResult } = yield* setupSession.pipe(
-      Effect.catch((error) =>
-        !isAcpAuthenticationRequired(error) || options.authenticateOnAuthRequired === false
-          ? Effect.fail(error)
-          : authenticateAfterRequired(error).pipe(Effect.andThen(setupSession)),
+      Effect.catchIf(
+        (error) =>
+          !(!isAcpAuthenticationRequired(error) || options.authenticateOnAuthRequired === false),
+        (error) => authenticateAfterRequired(error).pipe(Effect.andThen(setupSession)),
       ),
     );
 
@@ -2579,12 +2579,13 @@ export const make = Effect.fn("AcpSessionRuntime.make")(function* (
           ),
           (activePrompt) =>
             Fiber.join(activePrompt.fiber).pipe(
-              Effect.catchCause((cause) =>
-                options.cancelBehavior !== "wait-for-prompt" && Cause.hasInterruptsOnly(cause)
-                  ? Effect.succeed({
-                      stopReason: "cancelled",
-                    } satisfies EffectAcpSchema.PromptResponse)
-                  : Effect.failCause(cause),
+              Effect.catchCauseIf(
+                (cause) =>
+                  options.cancelBehavior !== "wait-for-prompt" && Cause.hasInterruptsOnly(cause),
+                (cause) =>
+                  Effect.succeed({
+                    stopReason: "cancelled",
+                  } satisfies EffectAcpSchema.PromptResponse),
               ),
               Effect.tap(() =>
                 closeActiveAssistantSegment({ queue: eventQueue, assistantSegmentRef }),
