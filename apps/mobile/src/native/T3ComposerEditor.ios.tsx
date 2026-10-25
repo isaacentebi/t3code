@@ -158,10 +158,14 @@ export function ComposerEditor({
   const skillLabels = useMemo(() => composerSkillLabels(skills), [skills]);
   const chipTextColor = createNativeComposerTheme(theme).text;
   const tokensJson = useMemo(() => {
+    /* oxlint-disable react/refs -- Native controlled edits must reconcile against the last acknowledged native event before sending the next payload. */
     const tokens = collectComposerInlineTokens(props.value, {
       preserveTrailingFrom: confirmedTokensRef.current,
     });
+    /* oxlint-enable react/refs */
+    /* oxlint-disable react/refs -- Native controlled edits must reconcile against the last acknowledged native event before sending the next payload. */
     confirmedTokensRef.current = tokens;
+    /* oxlint-enable react/refs */
     return JSON.stringify(
       composerContextEditorTokens(props.value, tokens, skillLabels).map((token) => {
         const record =
@@ -199,18 +203,22 @@ export function ComposerEditor({
   // (value, selection) lags the acknowledged native state is stamped behind
   // the native revision and rejected by the editor instead of re-applying a
   // stale caret or stale text mid-typing.
+  /* oxlint-disable react/refs -- Native controlled edits must reconcile against the last acknowledged native event before sending the next payload. */
   const controlledEventCount = resolveComposerControlledEventCount(
     props.value,
     selection ?? null,
     mostRecentEventCount,
     nativeEventSnapshotsRef.current,
   );
+  /* oxlint-enable react/refs */
+  /* oxlint-disable react/refs -- Native controlled edits must reconcile against the last acknowledged native event before sending the next payload. */
   const acknowledgesLatestNativeEvent = isComposerNativeEcho(
     props.value,
     selection ?? null,
     mostRecentEventCount,
     nativeEventSnapshotsRef.current,
   );
+  /* oxlint-enable react/refs */
   const isNativeEcho =
     controlledEventCount === mostRecentEventCount && acknowledgesLatestNativeEvent;
   const controlledDocumentJson = JSON.stringify({

@@ -4,7 +4,7 @@ import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import { sortInboxThreadsByReturn } from "@t3tools/client-runtime/state/thread-inbox";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Animated, FlatList, Modal, Pressable, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Reanimated, { ReduceMotion, useAnimatedStyle, withTiming } from "react-native-reanimated";
@@ -102,7 +102,10 @@ function DragHandle(props: {
   canMoveDown: boolean;
 }) {
   const latest = useRef(props);
-  latest.current = props;
+  useLayoutEffect(() => {
+    latest.current = props;
+  }, [props]);
+  /* oxlint-disable react/refs -- Gesture builder callbacks read the ref only when native gesture events fire. */
   const gesture = useMemo(
     () =>
       // oxlint-disable-next-line react/capitalized-calls -- Gesture.Pan is a gesture factory, not a React component.
@@ -117,6 +120,7 @@ function DragHandle(props: {
         .onFinalize((_, success) => latest.current.onEnd(!success)),
     [props.disabled],
   );
+  /* oxlint-enable react/refs */
   return (
     <GestureDetector gesture={gesture}>
       <View
@@ -271,9 +275,11 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
   const drag = useRef<Drag | null>(null);
   const frame = useRef<number | null>(null);
   const [preview, setPreview] = useState<Drag | null>(null);
-  const translateY = useRef(new Animated.Value(0)).current;
+  const [translateY] = useState(() => new Animated.Value(0));
   const latest = useRef({ rows, planners, moveThread });
-  latest.current = { rows, planners, moveThread };
+  useLayoutEffect(() => {
+    latest.current = { rows, planners, moveThread };
+  }, [rows, planners, moveThread]);
 
   function stop() {
     if (frame.current !== null) cancelAnimationFrame(frame.current);

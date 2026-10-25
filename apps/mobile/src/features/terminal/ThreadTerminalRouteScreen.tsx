@@ -786,11 +786,7 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
     [isRunning, selectedThread, terminalId, writeTerminal],
   );
 
-  const pasteSessionRef = useRef<ReturnType<typeof createTerminalPasteSession> | null>(null);
-  if (pasteSessionRef.current === null) {
-    pasteSessionRef.current = createTerminalPasteSession();
-  }
-  const pasteSession = pasteSessionRef.current;
+  const [pasteSession] = useState(createTerminalPasteSession);
 
   useEffect(() => {
     pasteSession.reset(canOperateTerminal && isRunning);

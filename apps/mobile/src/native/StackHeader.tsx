@@ -195,6 +195,7 @@ export function NativeStackScreenOptions(props: {
   const latestOptionFunctionsRef = useRef(new Map<string, (...args: unknown[]) => unknown>());
   const optionFunctionWrappersRef = useRef(new Map<string, (...args: unknown[]) => unknown>());
   const normalizedOptions = useMemo(() => normalizeScreenOptions(props.options), [props.options]);
+  /* oxlint-disable react/refs -- Native navigation needs stable callback wrappers across renders; these maps retain wrapper identity. */
   const stableOptions = normalizedOptions
     ? (stabilizeOptionFunctions(
         normalizedOptions,
@@ -203,6 +204,7 @@ export function NativeStackScreenOptions(props: {
         optionFunctionWrappersRef.current,
       ) as NativeStackNavigationOptions)
     : undefined;
+  /* oxlint-enable react/refs */
 
   useLayoutEffect(() => {
     if (!tabActive) {

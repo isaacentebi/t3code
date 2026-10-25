@@ -216,6 +216,7 @@ export default defineConfig({
       perf: "warn",
     },
     rules: {
+      "react/refs": "error",
       "react/immutability": "error",
       "oxc/no-accumulating-spread": "error",
       "react/no-array-index-key": "error",

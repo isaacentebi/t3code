@@ -145,7 +145,11 @@ export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
     <>
       {typeof props.children === "function" ? (
         <View ref={anchorRef} collapsable={false} className={props.className} style={props.style}>
-          {props.children(open)}
+          {
+            /* oxlint-disable react/refs -- Cloning the trigger installs event callbacks; the refs are accessed when those callbacks run. */
+            props.children(open)
+            /* oxlint-enable react/refs */
+          }
         </View>
       ) : (
         <Pressable

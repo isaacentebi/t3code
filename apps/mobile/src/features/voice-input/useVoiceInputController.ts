@@ -1,5 +1,5 @@
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import {
   voiceInputBlocksSubmission,
   type VoiceInputState,
@@ -24,7 +24,9 @@ export function useVoiceInputController(input: {
   const global = useGlobalVoiceInput();
   const { setOwnerFocused, session } = global;
   const latestInput = useRef(input);
-  latestInput.current = input;
+  useLayoutEffect(() => {
+    latestInput.current = input;
+  }, [input]);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
