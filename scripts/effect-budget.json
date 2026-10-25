@@ -216,7 +216,7 @@
   "apps/web/src/components/SlowRpcRequestToastCoordinator.tsx": 2,
   "apps/web/src/components/ThreadNotificationCoordinator.tsx": 5,
   "apps/web/src/components/ThreadRouteView.tsx": 5,
-  "apps/web/src/components/ThreadTerminalDrawer.tsx": 12,
+  "apps/web/src/components/ThreadTerminalDrawer.tsx": 13,
   "apps/web/src/components/auth/ConnectAgentSurface.tsx": 1,
   "apps/web/src/components/auth/PairingRouteSurface.tsx": 2,
   "apps/web/src/components/chat/AgentElapsed.tsx": 1,
