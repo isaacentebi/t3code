@@ -102,24 +102,32 @@ export function HardwareKeyboardCommandProvider({
     getHardwareKeyboardCommandRegistrationVersion,
     getHardwareKeyboardCommandRegistrationVersion,
   );
-  const enabledCommands = useMemo(() => {
-    const commands = new Set<HardwareKeyboardCommand>(getRegisteredHardwareKeyboardCommands());
-    commands.add("newTask");
-    commands.add("commandPalette");
-    if (pathname !== "/" && !pathname.startsWith("/threads/")) {
-      for (const command of commands) {
-        if (command.startsWith("thread.jump.")) commands.delete(command);
+  const enabledCommands = useMemo(
+    () => {
+      const commands = new Set<HardwareKeyboardCommand>(getRegisteredHardwareKeyboardCommands());
+      commands.add("newTask");
+      commands.add("commandPalette");
+      if (pathname !== "/" && !pathname.startsWith("/threads/")) {
+        for (const command of commands) {
+          if (command.startsWith("thread.jump.")) commands.delete(command);
+        }
       }
-    }
-    if (pathname !== "/" || navigation.canGoBack()) commands.add("back");
-    if (activeThreadRef !== null) {
-      commands.add("files");
-      commands.add("terminal");
-      commands.add("review");
-      if (pathname.split("/")[4] !== "terminal") commands.add("copyThreadReference");
-    }
-    return [...commands];
-  }, [activeThreadRef, pathname, registrationVersion, navigation]);
+      if (pathname !== "/" || navigation.canGoBack()) commands.add("back");
+      if (activeThreadRef !== null) {
+        commands.add("files");
+        commands.add("terminal");
+        commands.add("review");
+        if (pathname.split("/")[4] !== "terminal") commands.add("copyThreadReference");
+      }
+      return [...commands];
+    },
+    /* oxlint-disable react/memo-dependencies -- The registration version invalidates the external keyboard-command registry snapshot. */ [
+      activeThreadRef,
+      pathname,
+      registrationVersion,
+      navigation,
+    ] /* oxlint-enable react/memo-dependencies */,
+  );
 
   const onCommand = useCallback(
     (command: HardwareKeyboardCommand) => {

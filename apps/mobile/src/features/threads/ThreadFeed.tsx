@@ -584,13 +584,20 @@ function MessageAttachmentFile(props: {
   const [opening, setOpening] = useState(false);
 
   useFocusEffect(
-    useCallback(() => {
-      setOpening(false);
-      return () => {
-        openingRef.current?.abort();
-        openingRef.current = null;
-      };
-    }, [props.environmentId, attachment.id, httpBaseUrl]),
+    useCallback(
+      () => {
+        setOpening(false);
+        return () => {
+          openingRef.current?.abort();
+          openingRef.current = null;
+        };
+      },
+      /* oxlint-disable react/memo-dependencies -- Changing the attachment or connection cancels the previous file open even while this screen stays focused. */ [
+        props.environmentId,
+        attachment.id,
+        httpBaseUrl,
+      ] /* oxlint-enable react/memo-dependencies */,
+    ),
   );
 
   const shareFile = (sourceIdentifier?: string) => {

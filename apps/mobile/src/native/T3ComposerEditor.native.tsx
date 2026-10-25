@@ -155,48 +155,52 @@ export function ComposerEditor({
 
   const skillLabels = useMemo(() => composerSkillLabels(skills), [skills]);
   const chipTextColor = createNativeComposerTheme(theme).text;
-  const tokensJson = useMemo(() => {
-    /* oxlint-disable react/refs -- Native controlled edits must reconcile against the last acknowledged native event before sending the next payload. */
-    const tokens = collectComposerInlineTokens(props.value, {
-      preserveTrailingFrom: confirmedTokensRef.current,
-    });
-    /* oxlint-enable react/refs */
-    /* oxlint-disable react/refs -- Native controlled edits must reconcile against the last acknowledged native event before sending the next payload. */
-    confirmedTokensRef.current = tokens;
-    /* oxlint-enable react/refs */
-    return JSON.stringify(
-      composerContextEditorTokens(props.value, tokens, skillLabels).map((token) => {
-        const record =
-          token.type === "context"
-            ? props.context?.records.find((record) => record.contextId === token.contextId)
-            : undefined;
-        const presentation = contextChipPresentation(
-          token.type === "context" ? token.kind : token.type,
-          record,
-        );
-        const icon = contextChipIcon(
-          presentation,
-          token.type === "mention" ? token.value : contextRecordFileName(record),
-        );
-        return {
-          type: token.type,
-          source: token.source,
-          start: token.start,
-          end: token.end,
-          accent: contextChipAccent(presentation.accent, theme, chipTextColor),
-          label:
-            token.type === "skill"
-              ? (skillLabels.get(token.value) ?? token.value)
-              : token.type === "context"
-                ? `${token.label}${props.context?.records.some((record) => record.contextId === token.contextId) ? "" : " · unavailable"}`
-                : basename(token.value),
-          detail: token.type === "context" ? composerChipSizeSuffix(record) : "",
-          iconUri: contextChipIconUri(icon),
-          tintsIcon: icon.kind === "chip",
-        };
-      }),
-    );
-  }, [props.value, props.context, skillLabels, theme, chipTextColor]);
+  const tokensJson = useMemo(
+    () => {
+      /* oxlint-disable react/refs -- Native controlled edits must reconcile against the last acknowledged native event before sending the next payload. */
+      const tokens = collectComposerInlineTokens(props.value, {
+        preserveTrailingFrom: confirmedTokensRef.current,
+      });
+      /* oxlint-enable react/refs */
+      /* oxlint-disable react/refs -- Native controlled edits must reconcile against the last acknowledged native event before sending the next payload. */
+      confirmedTokensRef.current = tokens;
+      /* oxlint-enable react/refs */
+      return JSON.stringify(
+        composerContextEditorTokens(props.value, tokens, skillLabels).map((token) => {
+          const record =
+            token.type === "context"
+              ? props.context?.records.find((record) => record.contextId === token.contextId)
+              : undefined;
+          const presentation = contextChipPresentation(
+            token.type === "context" ? token.kind : token.type,
+            record,
+          );
+          const icon = contextChipIcon(
+            presentation,
+            token.type === "mention" ? token.value : contextRecordFileName(record),
+          );
+          return {
+            type: token.type,
+            source: token.source,
+            start: token.start,
+            end: token.end,
+            accent: contextChipAccent(presentation.accent, theme, chipTextColor),
+            label:
+              token.type === "skill"
+                ? (skillLabels.get(token.value) ?? token.value)
+                : token.type === "context"
+                  ? `${token.label}${props.context?.records.some((record) => record.contextId === token.contextId) ? "" : " · unavailable"}`
+                  : basename(token.value),
+            detail: token.type === "context" ? composerChipSizeSuffix(record) : "",
+            iconUri: contextChipIconUri(icon),
+            tintsIcon: icon.kind === "chip",
+          };
+        }),
+      );
+    } /* oxlint-disable react/memo-dependencies -- This stable ref stores the last confirmed native tokens; mutating its contents must not invalidate this memo. */,
+    [props.value, props.context, skillLabels, theme, chipTextColor],
+    /* oxlint-enable react/memo-dependencies */
+  );
   // Every render resolves against the snapshot history, so a render whose
   // (value, selection) lags the acknowledged native state is stamped behind
   // the native revision and rejected by the editor instead of re-applying a
@@ -260,7 +264,7 @@ export function ComposerEditor({
       });
       return acknowledgedEventCount;
     },
-    [],
+    [nativeEventSnapshotsRef],
   );
   const { systemColorsActive } = useAppearancePreferences();
   const themeJson = JSON.stringify({

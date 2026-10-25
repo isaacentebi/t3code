@@ -216,6 +216,7 @@ export default defineConfig({
       perf: "warn",
     },
     rules: {
+      "react/memo-dependencies": "error",
       "react/refs": "error",
       "react/immutability": "error",
       "oxc/no-accumulating-spread": "error",

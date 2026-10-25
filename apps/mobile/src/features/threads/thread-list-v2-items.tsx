@@ -731,7 +731,10 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   });
   const snoozePresets = useMemo(
     () => (swipeActions.secondary === "snooze" ? resolveSnoozePresets(new Date()) : ([] as const)),
-    [props.snoozePresetMinute, swipeActions.secondary],
+    /* oxlint-disable react/memo-dependencies -- The minute tick refreshes relative snooze times while the row remains mounted. */ [
+      props.snoozePresetMinute,
+      swipeActions.secondary,
+    ] /* oxlint-enable react/memo-dependencies */,
   );
   const snoozePresetActions = useMemo<MenuAction[]>(
     () => [
@@ -777,7 +780,6 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       props.reorderSupported,
       props.pinningSupported,
       thread.pinnedAt,
-      variant,
     ],
   );
   const autoSettleMenuItems = useMemo<MenuAction[]>(
