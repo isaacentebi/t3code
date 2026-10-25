@@ -133,32 +133,40 @@ export const make = Effect.gen(function* () {
   const passwordPrompt = SshAuth.SshPasswordPrompt.of(makePasswordPrompt(prompts));
 
   return DesktopSshEnvironment.of({
-    discoverHosts: (input) =>
-      discoverDesktopSshHostsEffect(input).pipe(
+    discoverHosts: Effect.fn("DesktopSshEnvironment.discoverHosts")(function (input) {
+      return discoverDesktopSshHostsEffect(input).pipe(
         Effect.provide(runtimeContext),
         Effect.withSpan("desktop.ssh.discoverHosts"),
-      ),
-    resolveHost: (alias) =>
-      resolveSshTarget(alias.trim()).pipe(
+      );
+    }),
+    resolveHost: Effect.fn("DesktopSshEnvironment.resolveHost")(function (alias) {
+      return resolveSshTarget(alias.trim()).pipe(
         Effect.provide(runtimeContext),
         Effect.withSpan("desktop.ssh.resolveHost"),
-      ),
-    ensureEnvironment: (target, ensureOptions) =>
-      manager
-        .ensureEnvironment(target, ensureOptions)
-        .pipe(
-          Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
-          Effect.provide(runtimeContext),
-          Effect.withSpan("desktop.ssh.ensureEnvironment"),
-        ),
-    disconnectEnvironment: (target) =>
-      manager
-        .disconnectEnvironment(target)
-        .pipe(
-          Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
-          Effect.provide(runtimeContext),
-          Effect.withSpan("desktop.ssh.disconnectEnvironment"),
-        ),
+      );
+    }),
+    ensureEnvironment: Effect.fn("DesktopSshEnvironment.ensureEnvironment")(
+      function (target, ensureOptions) {
+        return manager
+          .ensureEnvironment(target, ensureOptions)
+          .pipe(
+            Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
+            Effect.provide(runtimeContext),
+            Effect.withSpan("desktop.ssh.ensureEnvironment"),
+          );
+      },
+    ),
+    disconnectEnvironment: Effect.fn("DesktopSshEnvironment.disconnectEnvironment")(
+      function (target) {
+        return manager
+          .disconnectEnvironment(target)
+          .pipe(
+            Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
+            Effect.provide(runtimeContext),
+            Effect.withSpan("desktop.ssh.disconnectEnvironment"),
+          );
+      },
+    ),
   });
 });
 

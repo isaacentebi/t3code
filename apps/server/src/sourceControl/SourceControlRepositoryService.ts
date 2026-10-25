@@ -522,28 +522,43 @@ export const make = Effect.gen(function* () {
   );
 
   return SourceControlRepositoryService.of({
-    lookupRepository: (input) =>
-      lookupRepository(input).pipe(mapRepositoryError("lookupRepository", input.provider)),
-    prepareClone: (input) =>
-      prepareClone(input).pipe(
+    lookupRepository: Effect.fn("SourceControlRepositoryService.lookupRepository")(
+      function (input) {
+        return lookupRepository(input).pipe(mapRepositoryError("lookupRepository", input.provider));
+      },
+    ),
+    prepareClone: Effect.fn("SourceControlRepositoryService.prepareClone")(function (input) {
+      return prepareClone(input).pipe(
         mapRepositoryError(
           "cloneRepository",
           input.provider ?? SourceControlProviderKind.make("unknown"),
         ),
-      ),
-    cloneRepository: (input, options) =>
-      cloneRepository(input, options).pipe(
-        mapRepositoryError(
-          "cloneRepository",
-          input.provider ?? SourceControlProviderKind.make("unknown"),
-        ),
-      ),
-    discardClone: (destinationPath) =>
-      discardClone(destinationPath).pipe(
-        mapRepositoryError("discardClone", SourceControlProviderKind.make("unknown")),
-      ),
-    publishRepository: (input) =>
-      publishRepository(input).pipe(mapRepositoryError("publishRepository", input.provider)),
+      );
+    }),
+    cloneRepository: Effect.fn("SourceControlRepositoryService.cloneRepository")(
+      function (input, options) {
+        return cloneRepository(input, options).pipe(
+          mapRepositoryError(
+            "cloneRepository",
+            input.provider ?? SourceControlProviderKind.make("unknown"),
+          ),
+        );
+      },
+    ),
+    discardClone: Effect.fn("SourceControlRepositoryService.discardClone")(
+      function (destinationPath) {
+        return discardClone(destinationPath).pipe(
+          mapRepositoryError("discardClone", SourceControlProviderKind.make("unknown")),
+        );
+      },
+    ),
+    publishRepository: Effect.fn("SourceControlRepositoryService.publishRepository")(
+      function (input) {
+        return publishRepository(input).pipe(
+          mapRepositoryError("publishRepository", input.provider),
+        );
+      },
+    ),
   });
 });
 

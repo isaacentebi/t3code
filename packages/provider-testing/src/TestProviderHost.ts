@@ -56,18 +56,25 @@ export const layer = (
           changes: Stream.empty,
           subscribe: Effect.succeed(Stream.empty),
         },
-        shouldRunBackgroundWork: () => Effect.succeed(options.runBackgroundWork ?? true),
+        shouldRunBackgroundWork: Effect.fn("ProviderHost.ProviderHost.shouldRunBackgroundWork")(
+          function () {
+            return Effect.succeed(options.runBackgroundWork ?? true);
+          },
+        ),
         resolveAttachmentPath: (attachment) => path.join(attachmentsDir, attachment.id),
-        credentials: (namespace, bindingId) =>
-          Effect.sync(() => {
-            const key = `${namespace}:${bindingId}`;
-            return {
-              binding: { owner: "t3" as const, key },
-              get: Effect.sync(() => Option.fromUndefinedOr(credentials.get(key))),
-              set: (value: Uint8Array) => Effect.sync(() => void credentials.set(key, value)),
-              remove: Effect.sync(() => void credentials.delete(key)),
-            };
-          }),
+        credentials: Effect.fn("ProviderHost.ProviderHost.credentials")(
+          function (namespace, bindingId) {
+            return Effect.sync(() => {
+              const key = `${namespace}:${bindingId}`;
+              return {
+                binding: { owner: "t3" as const, key },
+                get: Effect.sync(() => Option.fromUndefinedOr(credentials.get(key))),
+                set: (value: Uint8Array) => Effect.sync(() => void credentials.set(key, value)),
+                remove: Effect.sync(() => void credentials.delete(key)),
+              };
+            });
+          },
+        ),
       });
       return Context.make(ProviderHost.ProviderHost, host).pipe(
         Context.add(TestProviderHostSettings, {

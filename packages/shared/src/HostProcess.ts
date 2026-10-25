@@ -77,19 +77,18 @@ export const IsExecutable = Context.Reference<boolean>("@t3tools/shared/HostProc
 export const Addresses = Context.Reference<Effect.Effect<ReadonlySet<string>>>(
   "@t3tools/shared/HostProcess/Addresses",
   {
-    defaultValue: () =>
-      Effect.gen(function* () {
-        const interfaces = Object.values(NodeOS.networkInterfaces())
-          .flat()
-          .flatMap((entry) => (entry ? [entry.address] : []));
-        const resolved = yield* Effect.tryPromise(() =>
-          NodeDns.promises.lookup(NodeOS.hostname(), { all: true }),
-        ).pipe(
-          Effect.map((entries) => entries.map((entry) => entry.address)),
-          Effect.orElseSucceed(() => [] as ReadonlyArray<string>),
-        );
-        return new Set([...interfaces, ...resolved]);
-      }),
+    defaultValue: Effect.fn("defaultValue")(function* () {
+      const interfaces = Object.values(NodeOS.networkInterfaces())
+        .flat()
+        .flatMap((entry) => (entry ? [entry.address] : []));
+      const resolved = yield* Effect.tryPromise(() =>
+        NodeDns.promises.lookup(NodeOS.hostname(), { all: true }),
+      ).pipe(
+        Effect.map((entries) => entries.map((entry) => entry.address)),
+        Effect.orElseSucceed(() => [] as ReadonlyArray<string>),
+      );
+      return new Set([...interfaces, ...resolved]);
+    }),
   },
 );
 

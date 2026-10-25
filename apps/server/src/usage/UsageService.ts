@@ -162,8 +162,8 @@ const EMPTY_PRICING: UsagePricing = {
 const layerTest = Layer.succeed(
   UsageService,
   UsageService.of({
-    readSummary: (input) =>
-      Effect.succeed({
+    readSummary: Effect.fn("UsageService.readSummary")(function (input) {
+      return Effect.succeed({
         contractVersion: USAGE_CONTRACT_VERSION,
         readAt: "1970-01-01T00:00:00.000Z",
         timeZone: input.timeZone,
@@ -173,7 +173,8 @@ const layerTest = Layer.succeed(
         sources: [],
         pricing: EMPTY_PRICING,
         scanDurationMs: 0,
-      }),
+      });
+    }),
     refreshRates: Effect.succeed(EMPTY_PRICING),
   }),
 );

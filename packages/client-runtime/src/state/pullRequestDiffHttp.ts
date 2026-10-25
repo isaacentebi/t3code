@@ -87,13 +87,14 @@ export const layer: Layer.Layer<PullRequestDiffLoader, never, HttpClient.HttpCli
       RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization,
     );
     return PullRequestDiffLoader.of({
-      load: (prepared, input) =>
-        fetchEnvironmentPullRequestDiff({
+      load: Effect.fn("PullRequestDiffLoader.load")(function (prepared, input) {
+        return fetchEnvironmentPullRequestDiff({
           prepared,
           diff: input,
           signer,
           remoteAuthorization,
-        }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient)),
+        }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
+      }),
     });
   }),
 );

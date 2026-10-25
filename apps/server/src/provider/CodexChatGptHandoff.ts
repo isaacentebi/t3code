@@ -18,17 +18,27 @@ export function subscribeChatGptHandoff(
       const bytes = new Map<string, Uint8Array>();
       yield* Effect.addFinalizer(() => Effect.sync(() => bytes.clear()));
       const store = ServerSecretStore.ServerSecretStore.of({
-        get: (key) => Effect.sync(() => Option.fromUndefinedOr(bytes.get(key))),
-        set: (key, value) =>
-          Effect.sync(() => {
+        get: Effect.fn("ServerSecretStore.ServerSecretStore.get")(function (key) {
+          return Effect.sync(() => Option.fromUndefinedOr(bytes.get(key)));
+        }),
+        set: Effect.fn("ServerSecretStore.ServerSecretStore.set")(function (key, value) {
+          return Effect.sync(() => {
             bytes.set(key, value);
-          }),
-        remove: (key) =>
-          Effect.sync(() => {
+          });
+        }),
+        remove: Effect.fn("ServerSecretStore.ServerSecretStore.remove")(function (key) {
+          return Effect.sync(() => {
             bytes.delete(key);
-          }),
-        create: () => Effect.die("Handoff does not create persistent secrets."),
-        getOrCreateRandom: () => Effect.die("Handoff uses the destination environment identity."),
+          });
+        }),
+        create: Effect.fn("ServerSecretStore.ServerSecretStore.create")(function () {
+          return Effect.die("Handoff does not create persistent secrets.");
+        }),
+        getOrCreateRandom: Effect.fn("ServerSecretStore.ServerSecretStore.getOrCreateRandom")(
+          function () {
+            return Effect.die("Handoff uses the destination environment identity.");
+          },
+        ),
       });
       const auth = yield* makeCodexChatGptAuth({
         ...endpoints,

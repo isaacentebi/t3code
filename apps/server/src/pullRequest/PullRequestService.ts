@@ -3623,10 +3623,11 @@ export const make = Effect.gen(function* () {
     withRoutingCredential,
     list,
     filterOptions,
-    listStats: (input) =>
-      Effect.forEach(input.refs, (ref) => canonicalRef(ref).pipe(Effect.option)).pipe(
+    listStats: Effect.fn("PullRequestService.listStats")(function (input) {
+      return Effect.forEach(input.refs, (ref) => canonicalRef(ref).pipe(Effect.option)).pipe(
         Effect.flatMap((refs) => listStats({ ...input, refs: refs.flatMap(Option.toArray) })),
-      ),
+      );
+    }),
     summary: credentialCached(summary),
     stack: credentialCached(stack),
     subscribeMerges: PubSub.subscribe(mergedPullRequests).pipe(

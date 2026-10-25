@@ -36,30 +36,35 @@ export const layer = Layer.effect(
       shouldRunBackgroundWork: backgroundPolicy.shouldRunScopeWork,
       resolveAttachmentPath: (attachment) =>
         resolveAttachmentPath({ attachmentsDir: config.attachmentsDir, attachment }),
-      credentials: (namespace, bindingId) =>
-        ProviderCredentialStore.make(namespace, bindingId).pipe(
-          Effect.map((store) => ({
-            binding: store.binding,
-            get: store.get.pipe(
-              Effect.mapError((cause) => new ProviderCredentialError({ operation: "get", cause })),
-            ),
-            set: (credentials: Uint8Array) =>
-              store
-                .set(credentials)
-                .pipe(
-                  Effect.mapError(
-                    (cause) => new ProviderCredentialError({ operation: "set", cause }),
-                  ),
+      credentials: Effect.fn("ProviderHost.ProviderHost.credentials")(
+        function (namespace, bindingId) {
+          return ProviderCredentialStore.make(namespace, bindingId).pipe(
+            Effect.map((store) => ({
+              binding: store.binding,
+              get: store.get.pipe(
+                Effect.mapError(
+                  (cause) => new ProviderCredentialError({ operation: "get", cause }),
                 ),
-            remove: store.remove.pipe(
-              Effect.mapError(
-                (cause) => new ProviderCredentialError({ operation: "remove", cause }),
               ),
-            ),
-          })),
-          Effect.provideService(ServerSecretStore.ServerSecretStore, secrets),
-          Effect.provideService(Crypto.Crypto, crypto),
-        ),
+              set: (credentials: Uint8Array) =>
+                store
+                  .set(credentials)
+                  .pipe(
+                    Effect.mapError(
+                      (cause) => new ProviderCredentialError({ operation: "set", cause }),
+                    ),
+                  ),
+              remove: store.remove.pipe(
+                Effect.mapError(
+                  (cause) => new ProviderCredentialError({ operation: "remove", cause }),
+                ),
+              ),
+            })),
+            Effect.provideService(ServerSecretStore.ServerSecretStore, secrets),
+            Effect.provideService(Crypto.Crypto, crypto),
+          );
+        },
+      ),
     });
   }),
 );

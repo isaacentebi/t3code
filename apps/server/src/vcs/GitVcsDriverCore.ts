@@ -4446,11 +4446,17 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     statusDetailsLocal,
     statusDetailsRemote,
     prepareCommitContext,
-    commit: (cwd, subject, body, options) =>
-      withListRefsInvalidation(cwd, commit(cwd, subject, body, options)),
-    pushCurrentBranch: (cwd, fallbackBranch, options) =>
-      withListRefsInvalidation(cwd, pushCurrentBranch(cwd, fallbackBranch, options)),
-    pullCurrentBranch: (cwd) => withListRefsInvalidation(cwd, pullCurrentBranch(cwd)),
+    commit: Effect.fn("GitVcsDriver.GitVcsDriver.commit")(function (cwd, subject, body, options) {
+      return withListRefsInvalidation(cwd, commit(cwd, subject, body, options));
+    }),
+    pushCurrentBranch: Effect.fn("GitVcsDriver.GitVcsDriver.pushCurrentBranch")(
+      function (cwd, fallbackBranch, options) {
+        return withListRefsInvalidation(cwd, pushCurrentBranch(cwd, fallbackBranch, options));
+      },
+    ),
+    pullCurrentBranch: Effect.fn("GitVcsDriver.GitVcsDriver.pullCurrentBranch")(function (cwd) {
+      return withListRefsInvalidation(cwd, pullCurrentBranch(cwd));
+    }),
     readRangeContext,
     getReviewDiffPreview,
     getReviewDiffFileContents,
@@ -4458,18 +4464,28 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     readBranchBase,
     resolveBranchName,
     listRefs,
-    createWorktree: (input, options) =>
-      withListRefsInvalidation(input.cwd, createWorktree(input, options)),
-    fetchRefIntoBranch: (input) => withListRefsInvalidation(input.cwd, fetchRefIntoBranch(input)),
+    createWorktree: Effect.fn("GitVcsDriver.GitVcsDriver.createWorktree")(
+      function (input, options) {
+        return withListRefsInvalidation(input.cwd, createWorktree(input, options));
+      },
+    ),
+    fetchRefIntoBranch: Effect.fn("GitVcsDriver.GitVcsDriver.fetchRefIntoBranch")(function (input) {
+      return withListRefsInvalidation(input.cwd, fetchRefIntoBranch(input));
+    }),
     fetchRefCommit,
     resolveCommit,
-    refreshCheckedOutBranch: (input) =>
-      withListRefsInvalidation(input.cwd, refreshCheckedOutBranch(input)),
-    ensureRemote: (input) => withListRefsInvalidation(input.cwd, ensureRemote(input)),
+    refreshCheckedOutBranch: Effect.fn("GitVcsDriver.GitVcsDriver.refreshCheckedOutBranch")(
+      function (input) {
+        return withListRefsInvalidation(input.cwd, refreshCheckedOutBranch(input));
+      },
+    ),
+    ensureRemote: Effect.fn("GitVcsDriver.GitVcsDriver.ensureRemote")(function (input) {
+      return withListRefsInvalidation(input.cwd, ensureRemote(input));
+    }),
     resolvePrimaryRemoteName,
     resolveDefaultBranchName,
-    fetchRemote: (input) =>
-      withListRefsInvalidation(
+    fetchRemote: Effect.fn("GitVcsDriver.GitVcsDriver.fetchRemote")(function (input) {
+      return withListRefsInvalidation(
         input.cwd,
         fetchRemote(input).pipe(
           Effect.flatMap((fetched) =>
@@ -4478,23 +4494,46 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
               : fetchRemote({ cwd: input.cwd, remoteName: input.remoteName }).pipe(Effect.asVoid),
           ),
         ),
-      ),
+      );
+    }),
     remoteExists,
     remoteBranchExists,
     resolveRemoteTrackingCommit,
     resolveWorktreeBaseRemote,
-    fetchWorktreeBaseCommit: (input) =>
-      withListRefsInvalidation(input.cwd, fetchWorktreeBaseCommit(input)),
-    fetchRemoteBranch: (input) => withListRefsInvalidation(input.cwd, fetchRemoteBranch(input)),
-    fetchRemoteTrackingBranch: (input) =>
-      withListRefsInvalidation(input.cwd, fetchRemoteTrackingBranch(input)),
-    setBranchUpstream: (input) => withListRefsInvalidation(input.cwd, setBranchUpstream(input)),
-    removeWorktree: (input) => withListRefsInvalidation(input.cwd, removeWorktree(input)),
-    pruneWorktrees: (input) => withListRefsInvalidation(input.cwd, pruneWorktrees(input)),
-    deleteLocalBranch: (input) => withListRefsInvalidation(input.cwd, deleteLocalBranch(input)),
-    renameBranch: (input) => withListRefsInvalidation(input.cwd, renameBranch(input)),
-    createRef: (input) => withListRefsInvalidation(input.cwd, createRef(input)),
-    switchRef: (input) => withListRefsInvalidation(input.cwd, switchRef(input)),
+    fetchWorktreeBaseCommit: Effect.fn("GitVcsDriver.GitVcsDriver.fetchWorktreeBaseCommit")(
+      function (input) {
+        return withListRefsInvalidation(input.cwd, fetchWorktreeBaseCommit(input));
+      },
+    ),
+    fetchRemoteBranch: Effect.fn("GitVcsDriver.GitVcsDriver.fetchRemoteBranch")(function (input) {
+      return withListRefsInvalidation(input.cwd, fetchRemoteBranch(input));
+    }),
+    fetchRemoteTrackingBranch: Effect.fn("GitVcsDriver.GitVcsDriver.fetchRemoteTrackingBranch")(
+      function (input) {
+        return withListRefsInvalidation(input.cwd, fetchRemoteTrackingBranch(input));
+      },
+    ),
+    setBranchUpstream: Effect.fn("GitVcsDriver.GitVcsDriver.setBranchUpstream")(function (input) {
+      return withListRefsInvalidation(input.cwd, setBranchUpstream(input));
+    }),
+    removeWorktree: Effect.fn("GitVcsDriver.GitVcsDriver.removeWorktree")(function (input) {
+      return withListRefsInvalidation(input.cwd, removeWorktree(input));
+    }),
+    pruneWorktrees: Effect.fn("GitVcsDriver.GitVcsDriver.pruneWorktrees")(function (input) {
+      return withListRefsInvalidation(input.cwd, pruneWorktrees(input));
+    }),
+    deleteLocalBranch: Effect.fn("GitVcsDriver.GitVcsDriver.deleteLocalBranch")(function (input) {
+      return withListRefsInvalidation(input.cwd, deleteLocalBranch(input));
+    }),
+    renameBranch: Effect.fn("GitVcsDriver.GitVcsDriver.renameBranch")(function (input) {
+      return withListRefsInvalidation(input.cwd, renameBranch(input));
+    }),
+    createRef: Effect.fn("GitVcsDriver.GitVcsDriver.createRef")(function (input) {
+      return withListRefsInvalidation(input.cwd, createRef(input));
+    }),
+    switchRef: Effect.fn("GitVcsDriver.GitVcsDriver.switchRef")(function (input) {
+      return withListRefsInvalidation(input.cwd, switchRef(input));
+    }),
     initRepo: initRepoWithListRefsInvalidation,
     listLocalBranchNames,
     listWorktreePaths,

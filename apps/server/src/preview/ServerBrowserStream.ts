@@ -176,7 +176,7 @@ const makeHandler = Effect.fnUntraced(function* (browser: ServerBrowser.ServerBr
           }
         }),
       );
-      const receive = (chunk: Uint8Array | string) => {
+      const receive = Effect.fn("receive")(function (chunk: Uint8Array | string) {
         const message = parseMessage(chunk);
         // Ownership serializes actions in the service. Keep reading so dialog
         // replies and takeover can unblock an action already waiting on the page.
@@ -193,7 +193,7 @@ const makeHandler = Effect.fnUntraced(function* (browser: ServerBrowser.ServerBr
           ack ? Effect.forkScoped(ack) : Effect.void,
           next ? sendFrame(next) : Effect.void,
         );
-      };
+      });
       const receiveInput = reader.pull.pipe(
         Effect.flatMap((chunks) => Effect.forEach(chunks, receive, { discard: true })),
       );

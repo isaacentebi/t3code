@@ -544,14 +544,18 @@ export const make = Effect.gen(function* () {
 
   return RemoteEnvironmentAuthorization.of({
     authorizeBearer,
-    authorizeDpop: (input) =>
-      authorizeDpop(input).pipe(Effect.withSpan("environment.authorization")),
-    authorizeDpopHttp: (input) =>
-      getDpopToken(input).pipe(
-        Effect.map(({ token }) => httpAuthorization(token)),
-        Effect.withSpan("environment.authorization.http"),
-        withRelayClientTracing,
-      ),
+    authorizeDpop: Effect.fn("RemoteEnvironmentAuthorization.authorizeDpop")(function (input) {
+      return authorizeDpop(input).pipe(Effect.withSpan("environment.authorization"));
+    }),
+    authorizeDpopHttp: Effect.fn("RemoteEnvironmentAuthorization.authorizeDpopHttp")(
+      function (input) {
+        return getDpopToken(input).pipe(
+          Effect.map(({ token }) => httpAuthorization(token)),
+          Effect.withSpan("environment.authorization.http"),
+          withRelayClientTracing,
+        );
+      },
+    ),
   });
 });
 

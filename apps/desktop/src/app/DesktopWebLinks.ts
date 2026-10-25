@@ -69,16 +69,18 @@ const make = Effect.gen(function* () {
   });
 
   return DesktopWebLinks.of({
-    receive: (url) =>
-      Effect.suspend(() => {
+    receive: Effect.fn("DesktopWebLinks.receive")(function (url) {
+      return Effect.suspend(() => {
         pending.push(url);
         return flush;
-      }).pipe(Effect.withSpan("DesktopWebLinks.receive")),
-    setRendererReady: (ready) =>
-      (ready ? startListening : Effect.sync(stopListening)).pipe(
+      }).pipe(Effect.withSpan("DesktopWebLinks.receive"));
+    }),
+    setRendererReady: Effect.fn("DesktopWebLinks.setRendererReady")(function (ready) {
+      return (ready ? startListening : Effect.sync(stopListening)).pipe(
         Effect.andThen(flush),
         Effect.withSpan("DesktopWebLinks.setRendererReady"),
-      ),
+      );
+    }),
   });
 });
 

@@ -56,8 +56,8 @@ export const make = Effect.gen(function* () {
         outsideTransaction,
         Effect.withSpan("relay.cloudflare_api_pause.read"),
       ),
-    pauseUntil: (untilMillis) =>
-      db
+    pauseUntil: Effect.fn("CloudflareApiPause.pauseUntil")(function (untilMillis) {
+      return db
         .insert(relayUpstreamApiPauses)
         .values({ api: CLOUDFLARE_API, pausedUntilMs: untilMillis })
         .onConflictDoUpdate({
@@ -73,7 +73,8 @@ export const make = Effect.gen(function* () {
           ),
           outsideTransaction,
           Effect.withSpan("relay.cloudflare_api_pause.record"),
-        ),
+        );
+    }),
   });
 });
 

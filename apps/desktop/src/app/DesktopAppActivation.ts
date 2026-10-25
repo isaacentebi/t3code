@@ -382,7 +382,9 @@ export const make = Effect.gen(function* () {
         webContents.send(DESKTOP_APP_ACTIVATION_REQUEST_CHANNEL, request);
       });
     }),
-    complete: (response) => Effect.sync(() => broker.complete(response)),
+    complete: Effect.fn("DesktopAppActivation.complete")(function (response) {
+      return Effect.sync(() => broker.complete(response));
+    }),
   });
 });
 

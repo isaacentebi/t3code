@@ -265,7 +265,7 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       textEncoder.encode('"}}\0'),
     ]).pipe(Effect.asVoid);
 
-  const receive = (raw: string) => {
+  const receive = Effect.fn("receive")(function (raw: string) {
     const message = Option.getOrUndefined(decodeCdpMessage(raw));
     if (message?.id !== undefined) {
       const waiter = pending.get(message.id);
@@ -321,7 +321,7 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
         text.length > MAX_CONSOLE_TEXT_CHARS ? `${text.slice(0, MAX_CONSOLE_TEXT_CHARS)}…` : text,
     });
     return Effect.void;
-  };
+  });
 
   // Startup aborts close the pipe; let stderr drain to recover the reason.
   const disconnect = Effect.gen(function* () {

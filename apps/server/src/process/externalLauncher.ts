@@ -818,19 +818,26 @@ export const make = Effect.gen(function* () {
   const cachedAvailableEditors = Effect.flatMap(acquireEditorDiscovery, Deferred.await);
 
   return ExternalLauncher.of({
-    resolveAvailableEditors: () => cachedAvailableEditors,
-    resolveFileManagerRevealKind: () =>
-      provideCommandResolutionServices(resolveFileManagerRevealKind()).pipe(
+    resolveAvailableEditors: Effect.fn("ExternalLauncher.resolveAvailableEditors")(function () {
+      return cachedAvailableEditors;
+    }),
+    resolveFileManagerRevealKind: Effect.fn("ExternalLauncher.resolveFileManagerRevealKind")(
+      function () {
+        return provideCommandResolutionServices(resolveFileManagerRevealKind()).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        );
+      },
+    ),
+    launchBrowser: Effect.fn("ExternalLauncher.launchBrowser")(function (target) {
+      return launchBrowser(target).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      ),
-    launchBrowser: (target) =>
-      launchBrowser(target).pipe(
+      );
+    }),
+    launchEditor: Effect.fn("ExternalLauncher.launchEditor")(function (input) {
+      return provideCommandResolutionServices(launchEditor(input)).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      ),
-    launchEditor: (input) =>
-      provideCommandResolutionServices(launchEditor(input)).pipe(
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      ),
+      );
+    }),
   });
 });
 

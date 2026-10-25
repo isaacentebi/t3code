@@ -195,37 +195,59 @@ function bindProviderContext(
 
   return SourceControlProvider.SourceControlProvider.of({
     ...provider,
-    listChangeRequests: (input) =>
-      provider.listChangeRequests({
+    listChangeRequests: Effect.fn("SourceControlProvider.SourceControlProvider.listChangeRequests")(
+      function (input) {
+        return provider.listChangeRequests({
+          ...input,
+          context: input.context ?? context,
+        });
+      },
+    ),
+    getChangeRequest: Effect.fn("SourceControlProvider.SourceControlProvider.getChangeRequest")(
+      function (input) {
+        return provider.getChangeRequest({
+          ...input,
+          context: input.context ?? context,
+        });
+      },
+    ),
+    createChangeRequest: Effect.fn(
+      "SourceControlProvider.SourceControlProvider.createChangeRequest",
+    )(function (input) {
+      return provider.createChangeRequest({
         ...input,
         context: input.context ?? context,
-      }),
-    getChangeRequest: (input) =>
-      provider.getChangeRequest({
+      });
+    }),
+    getRepositoryCloneUrls: Effect.fn(
+      "SourceControlProvider.SourceControlProvider.getRepositoryCloneUrls",
+    )(function (input) {
+      return provider.getRepositoryCloneUrls({
         ...input,
         context: input.context ?? context,
-      }),
-    createChangeRequest: (input) =>
-      provider.createChangeRequest({
+      });
+    }),
+    createRepository: Effect.fn("SourceControlProvider.SourceControlProvider.createRepository")(
+      function (input) {
+        return provider.createRepository(input);
+      },
+    ),
+    getDefaultBranch: Effect.fn("SourceControlProvider.SourceControlProvider.getDefaultBranch")(
+      function (input) {
+        return provider.getDefaultBranch({
+          ...input,
+          context: input.context ?? context,
+        });
+      },
+    ),
+    checkoutChangeRequest: Effect.fn(
+      "SourceControlProvider.SourceControlProvider.checkoutChangeRequest",
+    )(function (input) {
+      return provider.checkoutChangeRequest({
         ...input,
         context: input.context ?? context,
-      }),
-    getRepositoryCloneUrls: (input) =>
-      provider.getRepositoryCloneUrls({
-        ...input,
-        context: input.context ?? context,
-      }),
-    createRepository: (input) => provider.createRepository(input),
-    getDefaultBranch: (input) =>
-      provider.getDefaultBranch({
-        ...input,
-        context: input.context ?? context,
-      }),
-    checkoutChangeRequest: (input) =>
-      provider.checkoutChangeRequest({
-        ...input,
-        context: input.context ?? context,
-      }),
+      });
+    }),
   });
 }
 
@@ -336,7 +358,9 @@ export const makeWithProviders = Effect.fn("makeSourceControlProviderRegistryWit
       },
       get,
       resolveHandle,
-      resolve: (input) => resolveHandle(input).pipe(Effect.map((handle) => handle.provider)),
+      resolve: Effect.fn("SourceControlProviderRegistry.resolve")(function (input) {
+        return resolveHandle(input).pipe(Effect.map((handle) => handle.provider));
+      }),
       discover: Effect.forEach(
         discoverySpecs,
         (spec) =>

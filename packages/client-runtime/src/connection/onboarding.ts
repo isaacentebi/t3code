@@ -295,22 +295,25 @@ export const make = Effect.gen(function* () {
   const credentials = yield* ConnectionCredentialStore.ConnectionCredentialStore;
 
   return ConnectionOnboarding.of({
-    registerPairing: (input) =>
-      registerPairingConnection(input).pipe(
+    registerPairing: Effect.fn("ConnectionOnboarding.registerPairing")(function (input) {
+      return registerPairingConnection(input).pipe(
         Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
         Effect.provideService(ClientCapabilities.ClientPresentation, presentation),
         Effect.provideService(HttpClient.HttpClient, httpClient),
-      ),
-    registerSsh: (input) =>
-      registerSshConnection(input).pipe(
+      );
+    }),
+    registerSsh: Effect.fn("ConnectionOnboarding.registerSsh")(function (input) {
+      return registerSshConnection(input).pipe(
         Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
         Effect.provideService(ClientCapabilities.SshEnvironmentGateway, ssh),
-      ),
-    updateBearer: (input) =>
-      updateBearerConnection(input).pipe(
+      );
+    }),
+    updateBearer: Effect.fn("ConnectionOnboarding.updateBearer")(function (input) {
+      return updateBearerConnection(input).pipe(
         Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
         Effect.provideService(ConnectionCredentialStore.ConnectionCredentialStore, credentials),
-      ),
+      );
+    }),
   });
 });
 
