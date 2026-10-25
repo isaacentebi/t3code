@@ -28,6 +28,7 @@
           "flatMapIgnoredParamToAndThen": "error",
           "mapSomeToAsSome": "error",
           "unnecessaryPipeChain": "error",
+          "returnEffectInGen": "off",
           "effectFnOpportunity": "suggestion",
           "anyUnknownInErrorContext": "error",
           "unsafeEffectTypeAssertion": "error",
