@@ -8,8 +8,7 @@ import {
 import type {
   EnvironmentId,
   ProjectId,
-  PullRequestChecks,
-  PullRequestDetail,
+  PullRequestChecksState,
   PullRequestListInput,
   PullRequestFilterOptionsInput,
   PullRequestListStatsInput,
@@ -22,7 +21,6 @@ import {
   threadPullRequestKeyOf,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
-import { resolvePullRequestDetailChecks } from "@t3tools/client-runtime/pull-request-checks";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -45,13 +43,6 @@ export interface ObservedPullRequestSummary {
   /** Client arrival time, the only ordering older servers leave us for same-dated snapshots. */
   readonly observedAt: number;
 }
-
-const observedPullRequestSummaryAtom = Atom.family((key: string) =>
-  Atom.make<ObservedPullRequestSummary | null>(null).pipe(
-    Atom.setIdleTTL(5 * 60_000),
-    Atom.withLabel(`web-pull-requests:observed-summary:${key}`),
-  ),
-);
 
 function compareSummaries(current: PullRequestSummary, incoming: PullRequestSummary): number {
   const merged = Number(incoming.state === "merged") - Number(current.state === "merged");
@@ -136,75 +127,92 @@ export function newestPullRequestObservation(
   };
 }
 
+export interface ObservedPullRequestChecks {
+  readonly checksState: PullRequestChecksState | null;
+  /** Server read time, when the server reports one. */
+  readonly readAt: number | undefined;
+  /** Client arrival time. */
+  readonly observedAt: number;
+}
+
+/**
+ * Checks are reread far more often than the rest of a pull request, so they keep their own
+ * freshness: a checks read must not carry old metadata forward, and a list read must not take
+ * back newer checks.
+ */
+export interface PullRequestObservations {
+  readonly metadata: ObservedPullRequestSummary | null;
+  readonly checks: ObservedPullRequestChecks | null;
+}
+
+const noObservations: PullRequestObservations = { metadata: null, checks: null };
+
+const pullRequestObservationsAtom = Atom.family((key: string) =>
+  Atom.make<PullRequestObservations>(noObservations).pipe(
+    Atom.setIdleTTL(5 * 60_000),
+    Atom.withLabel(`web-pull-requests:observations:${key}`),
+  ),
+);
+
+export function observePullRequestChecks(
+  current: PullRequestObservations,
+  incoming: ObservedPullRequestChecks,
+): PullRequestObservations {
+  const previous = current.checks;
+  const newer =
+    previous === null ||
+    (previous.readAt !== undefined && incoming.readAt !== undefined
+      ? incoming.readAt >= previous.readAt
+      : incoming.observedAt >= previous.observedAt);
+  return newer ? { ...current, checks: incoming } : current;
+}
+
+export function observePullRequestMetadata(
+  current: PullRequestObservations,
+  incoming: ObservedPullRequestSummary,
+): PullRequestObservations {
+  const metadata = newestPullRequestObservation(current.metadata, incoming);
+  const next = metadata === current.metadata ? current : { ...current, metadata };
+  const { checksState } = incoming.summary;
+  return checksState === undefined
+    ? next
+    : observePullRequestChecks(next, {
+        checksState,
+        readAt: incoming.summary.observedAt,
+        observedAt: incoming.observedAt,
+      });
+}
+
+export function observedPullRequestSummary(
+  observations: PullRequestObservations,
+): PullRequestSummary | null {
+  const { metadata, checks } = observations;
+  if (metadata === null) return null;
+  return checks === null
+    ? metadata.summary
+    : { ...metadata.summary, checksState: checks.checksState };
+}
+
+function recordObservation(
+  registry: AtomRegistry.AtomRegistry,
+  key: string,
+  observe: (current: PullRequestObservations) => PullRequestObservations,
+): void {
+  registry.modify(pullRequestObservationsAtom(key), (previous) => {
+    const next = observe(previous);
+    return next === previous ? [false, previous] : [true, next];
+  });
+}
+
 function observePullRequestSummary(
   registry: AtomRegistry.AtomRegistry,
   key: string,
   summary: PullRequestSummary,
   observedAt: number,
 ): void {
-  registry.modify(observedPullRequestSummaryAtom(key), (previous) => {
-    const next = newestPullRequestObservation(previous, { summary, observedAt });
-    return next === previous ? [false, previous] : [true, next];
-  });
-}
-
-interface Answered<A> {
-  readonly value: A;
-  readonly at: number;
-}
-
-export interface LivePullRequestAnswers {
-  readonly detail: Answered<PullRequestDetail> | null;
-  readonly checks: Answered<PullRequestChecks | null> | null;
-}
-
-/** Detail answers carry checks too, so whichever of the two arrived last decides them. */
-export function livePullRequestObservation(
-  answers: LivePullRequestAnswers,
-): ObservedPullRequestSummary | null {
-  const { detail, checks } = answers;
-  if (detail === null) return null;
-  const live = resolvePullRequestDetailChecks(
-    detail.value,
-    checks?.value ?? null,
-    checks !== null && checks.at >= detail.at,
+  recordObservation(registry, key, (current) =>
+    observePullRequestMetadata(current, { summary, observedAt }),
   );
-  if (live === null) return null;
-  // Checks are reread far more often than detail. Ordered by the detail's read time, a newer
-  // checks read would tie with the summary that detail already placed and be dropped; ordered by
-  // its own, a list read taken before it still loses.
-  const checksReadAt = live === detail.value ? undefined : checks?.value?.observedAt;
-  const observedAt =
-    checksReadAt === undefined ? live.observedAt : Math.max(live.observedAt ?? 0, checksReadAt);
-  return {
-    summary: {
-      ...live,
-      ...(observedAt === undefined ? {} : { observedAt }),
-      checksState: pullRequestChecksState(live.checks),
-    },
-    observedAt: Math.max(detail.at, checks?.at ?? 0),
-  };
-}
-
-const livePullRequestAnswersAtom = Atom.family((key: string) =>
-  Atom.make<LivePullRequestAnswers>({ detail: null, checks: null }).pipe(
-    Atom.setIdleTTL(5 * 60_000),
-    Atom.withLabel(`web-pull-requests:live-answers:${key}`),
-  ),
-);
-
-function recordLiveAnswer(
-  registry: AtomRegistry.AtomRegistry,
-  key: string,
-  patch: Partial<LivePullRequestAnswers>,
-): void {
-  const atom = livePullRequestAnswersAtom(key);
-  const answers = { ...registry.get(atom), ...patch };
-  registry.set(atom, answers);
-  const observation = livePullRequestObservation(answers);
-  if (observation !== null) {
-    observePullRequestSummary(registry, key, observation.summary, observation.observedAt);
-  }
 }
 
 function snapshotStorage(): Storage | undefined {
@@ -230,16 +238,24 @@ export const pullRequestEnvironment = createPullRequestEnvironmentAtoms(connecti
       if (input.allowStale === false) {
         writePullRequestDetailSnapshot(snapshotStorage(), environmentId, input, detail);
       }
-      recordLiveAnswer(registry, pullRequestSummaryKey(environmentId, input), {
-        detail: { value: detail, at },
-      });
+      observePullRequestSummary(
+        registry,
+        pullRequestSummaryKey(environmentId, input),
+        { ...detail, checksState: pullRequestChecksState(detail.checks) },
+        at,
+      );
     }),
   checks: ({ environmentId, input }, checks, registry) =>
-    Effect.map(Clock.currentTimeMillis, (at) =>
-      recordLiveAnswer(registry, pullRequestSummaryKey(environmentId, input), {
-        checks: { value: checks, at },
-      }),
-    ),
+    Effect.map(Clock.currentTimeMillis, (observedAt) => {
+      if (checks === null) return;
+      recordObservation(registry, pullRequestSummaryKey(environmentId, input), (current) =>
+        observePullRequestChecks(current, {
+          checksState: pullRequestChecksState(checks.checks),
+          readAt: checks.observedAt,
+          observedAt,
+        }),
+      );
+    }),
 });
 
 export const linkedPullRequestDetailAtom = createLinkedPullRequestSummaryAtomFamily(
@@ -313,7 +329,7 @@ export function useSharedPullRequestSummary(
     environmentId === null || reference === null
       ? "none"
       : pullRequestSummaryKey(environmentId, reference);
-  const observed = useAtomValue(observedPullRequestSummaryAtom(key));
+  const observations = useAtomValue(pullRequestObservationsAtom(key));
   const saved = useAtomValue(
     savedPullRequestSummaryAtom(
       environmentId === null || reference === null
@@ -321,7 +337,7 @@ export function useSharedPullRequestSummary(
         : savedPullRequestKey(environmentId, reference),
     ),
   );
-  return newestPullRequestSummary(observed?.summary ?? null, saved);
+  return newestPullRequestSummary(observedPullRequestSummary(observations), saved);
 }
 export const pullRequestStackAtom = createPullRequestStackAtomFamily(
   connectionAtomRuntime,

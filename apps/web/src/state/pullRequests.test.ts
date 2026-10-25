@@ -1,15 +1,12 @@
 import { SourceControlProviderKind } from "@t3tools/contracts";
-import {
-  ProjectId,
-  type PullRequestCheck,
-  type PullRequestDetail,
-  type PullRequestSummary,
-} from "@t3tools/contracts";
+import { ProjectId, type PullRequestSummary } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  livePullRequestObservation,
   newestPullRequestObservation,
+  observedPullRequestSummary,
+  observePullRequestChecks,
+  observePullRequestMetadata,
   newestPullRequestSummary,
   threadPullRequestLinkToSummary,
 } from "./pullRequests";
@@ -121,50 +118,72 @@ describe("pull request summary cache", () => {
   });
 });
 
-describe("live pull request answers", () => {
-  const failing: PullRequestCheck = {
-    name: "build",
-    status: "failure",
-    url: null,
-    description: null,
-  };
-  const detail = { ...summary(), checks: [] } as unknown as PullRequestDetail;
+describe("pull request observations", () => {
+  const fromSummary = (value: PullRequestSummary, observedAt: number) =>
+    observePullRequestMetadata({ metadata: null, checks: null }, observed(value, observedAt));
+  const checksRead = (
+    checksState: "passing" | "failing" | "pending" | null,
+    readAt: number | undefined,
+    observedAt: number,
+  ) => ({ checksState, readAt, observedAt });
 
-  it("lets whichever of detail and checks answered last decide the checks", () => {
-    const checks = { value: { state: "open" as const, checks: [failing] }, at: 200 };
-    expect(livePullRequestObservation({ detail: { value: detail, at: 100 }, checks })).toEqual({
-      summary: { ...detail, checks: [failing], checksState: "failing" },
-      observedAt: 200,
+  it("keeps a newer list's mergeability when a checks read lands after it", () => {
+    const detail = summary({
+      mergeability: "conflicting",
+      checksState: "pending",
+      observedAt: 100,
     });
-    expect(
-      livePullRequestObservation({ detail: { value: detail, at: 300 }, checks }),
-    ).toMatchObject({ summary: { checks: [], checksState: null }, observedAt: 300 });
+    let state = fromSummary(detail, 1);
+    state = observePullRequestMetadata(
+      state,
+      observed(summary({ mergeability: "mergeable", checksState: "pending", observedAt: 200 }), 2),
+    );
+    state = observePullRequestChecks(state, checksRead("passing", 300, 3));
+    expect(observedPullRequestSummary(state)).toMatchObject({
+      mergeability: "mergeable",
+      checksState: "passing",
+    });
   });
 
-  it("lets a newer checks read replace the detail's checks while stale list reads stay out", () => {
-    const pending: PullRequestCheck = { ...failing, status: "pending" };
-    const passing: PullRequestCheck = { ...failing, status: "success" };
-    const read = { ...detail, observedAt: 100, checks: [pending] } as PullRequestDetail;
-    const fromDetail = livePullRequestObservation({
-      detail: { value: read, at: 1_000 },
-      checks: null,
+  it("keeps a newer checks read when an older list read lands after it", () => {
+    let state = fromSummary(
+      summary({ mergeability: "conflicting", checksState: "pending", observedAt: 100 }),
+      1,
+    );
+    state = observePullRequestChecks(state, checksRead("passing", 300, 2));
+    state = observePullRequestMetadata(
+      state,
+      observed(summary({ mergeability: "mergeable", checksState: "pending", observedAt: 250 }), 3),
+    );
+    expect(observedPullRequestSummary(state)).toMatchObject({
+      mergeability: "mergeable",
+      checksState: "passing",
     });
-    const fromChecks = livePullRequestObservation({
-      detail: { value: read, at: 1_000 },
-      checks: { value: { observedAt: 300, state: "open", checks: [passing] }, at: 2_000 },
-    });
-    const accepted = newestPullRequestObservation(fromDetail, fromChecks);
-    expect(accepted?.summary.checksState).toBe("passing");
-    const staleList = observed(summary({ checksState: "pending", observedAt: 200 }), 3_000);
-    expect(newestPullRequestObservation(accepted, staleList)).toBe(accepted);
   });
 
-  it("waits for a detail answer before observing checks", () => {
-    expect(
-      livePullRequestObservation({
-        detail: null,
-        checks: { value: { state: "open", checks: [failing] }, at: 1 },
-      }),
-    ).toBeNull();
+  it("lets a newer read's checks replace an older checks read", () => {
+    let state = fromSummary(summary({ checksState: "pending", observedAt: 100 }), 1);
+    state = observePullRequestChecks(state, checksRead("passing", 300, 2));
+    state = observePullRequestMetadata(
+      state,
+      observed(summary({ checksState: "failing", observedAt: 400 }), 3),
+    );
+    expect(observedPullRequestSummary(state)?.checksState).toBe("failing");
+  });
+
+  it("orders checks by arrival when the server reports no read time", () => {
+    let state = fromSummary(summary({ checksState: "pending" }), 1);
+    state = observePullRequestChecks(state, checksRead("passing", undefined, 2));
+    expect(observedPullRequestSummary(state)?.checksState).toBe("passing");
+    state = observePullRequestChecks(state, checksRead("failing", undefined, 1));
+    expect(observedPullRequestSummary(state)?.checksState).toBe("passing");
+  });
+
+  it("shows nothing until some read has described the pull request", () => {
+    const state = observePullRequestChecks(
+      { metadata: null, checks: null },
+      checksRead("failing", 1, 1),
+    );
+    expect(observedPullRequestSummary(state)).toBeNull();
   });
 });
