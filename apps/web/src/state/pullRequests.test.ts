@@ -1,8 +1,14 @@
 import { SourceControlProviderKind } from "@t3tools/contracts";
-import { ProjectId, type PullRequestSummary } from "@t3tools/contracts";
+import {
+  ProjectId,
+  type PullRequestCheck,
+  type PullRequestDetail,
+  type PullRequestSummary,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  livePullRequestObservation,
   newestPullRequestObservation,
   newestPullRequestSummary,
   threadPullRequestLinkToSummary,
@@ -111,6 +117,54 @@ describe("pull request summary cache", () => {
         { ...link, snapshot: { ...link.snapshot, updatedAt: null } },
         stale.projectId,
       ),
+    ).toBeNull();
+  });
+});
+
+describe("live pull request answers", () => {
+  const failing: PullRequestCheck = {
+    name: "build",
+    status: "failure",
+    url: null,
+    description: null,
+  };
+  const detail = { ...summary(), checks: [] } as unknown as PullRequestDetail;
+
+  it("lets whichever of detail and checks answered last decide the checks", () => {
+    const checks = { value: { state: "open" as const, checks: [failing] }, at: 200 };
+    expect(livePullRequestObservation({ detail: { value: detail, at: 100 }, checks })).toEqual({
+      summary: { ...detail, checks: [failing], checksState: "failing" },
+      observedAt: 200,
+    });
+    expect(
+      livePullRequestObservation({ detail: { value: detail, at: 300 }, checks }),
+    ).toMatchObject({ summary: { checks: [], checksState: null }, observedAt: 300 });
+  });
+
+  it("lets a newer checks read replace the detail's checks while stale list reads stay out", () => {
+    const pending: PullRequestCheck = { ...failing, status: "pending" };
+    const passing: PullRequestCheck = { ...failing, status: "success" };
+    const read = { ...detail, observedAt: 100, checks: [pending] } as PullRequestDetail;
+    const fromDetail = livePullRequestObservation({
+      detail: { value: read, at: 1_000 },
+      checks: null,
+    });
+    const fromChecks = livePullRequestObservation({
+      detail: { value: read, at: 1_000 },
+      checks: { value: { observedAt: 300, state: "open", checks: [passing] }, at: 2_000 },
+    });
+    const accepted = newestPullRequestObservation(fromDetail, fromChecks);
+    expect(accepted?.summary.checksState).toBe("passing");
+    const staleList = observed(summary({ checksState: "pending", observedAt: 200 }), 3_000);
+    expect(newestPullRequestObservation(accepted, staleList)).toBe(accepted);
+  });
+
+  it("waits for a detail answer before observing checks", () => {
+    expect(
+      livePullRequestObservation({
+        detail: null,
+        checks: { value: { state: "open", checks: [failing] }, at: 1 },
+      }),
     ).toBeNull();
   });
 });
