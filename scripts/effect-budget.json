@@ -350,7 +350,6 @@
   "apps/web/src/components/pullRequest/guide/PullRequestGuideRunCoordinator.tsx": 2,
   "apps/web/src/components/pullRequest/guide/useReviewGuideWriter.ts": 1,
   "apps/web/src/components/pullRequest/useInlineActionConfirm.ts": 1,
-  "apps/web/src/components/pullRequest/usePullRequestDetail.ts": 1,
   "apps/web/src/components/pullRequest/usePullRequestFilesViewed.ts": 2,
   "apps/web/src/components/pullRequest/usePullRequestListView.ts": 1,
   "apps/web/src/components/pullRequest/useThreadLinkedPullRequest.ts": 1,
@@ -430,7 +429,6 @@
   "apps/web/src/routes/_chat.tsx": 1,
   "apps/web/src/shortcutModifierState.ts": 1,
   "apps/web/src/state/olderSettledShelf.ts": 2,
-  "apps/web/src/state/pullRequests.ts": 2,
   "apps/web/src/state/queries.ts": 2,
   "apps/web/src/state/threads.ts": 1
 }
