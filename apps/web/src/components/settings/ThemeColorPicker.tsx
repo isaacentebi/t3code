@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { isThemeColor, themeColorToHex, type ThemeColorRole } from "../../themePalette";
 import { cn } from "../../lib/utils";
 import { hexToHsv, hsvToHex, type HsvColor } from "../../lib/color";
@@ -68,8 +68,8 @@ function themeRgbValue(hex: string) {
 
 // Local state updates immediately for a smooth thumb; the parent commit
 // (which can regenerate a whole guided palette) is batched to one call per
-// animation frame. The popover flushes it on close and the drag surfaces on
-// release, so the final frame is never lost.
+// animation frame. The popover flushes it on close, the drag surfaces on
+// release, and the picker on unmount, so the final frame is never lost.
 function createFrameCommitter() {
   let pending: { readonly color: string; readonly commit: (color: string) => void } | null = null;
   let frame: number | null = null;
@@ -248,6 +248,8 @@ function ThemeColorPicker({
   onInteract?: () => void;
 }) {
   const [committer] = useState(createFrameCommitter);
+  // Unmounting with the popover open (the editor closes mid-drag) never fires onOpenChange.
+  useEffect(() => committer.flush, [committer]);
   return (
     <Popover
       onOpenChange={(open) => {
