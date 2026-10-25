@@ -216,6 +216,7 @@ export default defineConfig({
       perf: "warn",
     },
     rules: {
+      "oxc/no-accumulating-spread": "error",
       "react/no-array-index-key": "error",
       "react/no-unstable-nested-components": "error",
       "react/static-components": "error",
