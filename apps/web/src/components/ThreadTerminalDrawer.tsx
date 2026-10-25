@@ -466,6 +466,7 @@ function TerminalSessionViewport({
   keybindings,
 }: TerminalViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const autoFocusedRef = useRef(false);
   const terminalRef = useRef<GhosttyTerminalSurface | null>(null);
   const visibleRef = useRef(visible);
   const environmentId = threadRef.environmentId;
@@ -1126,7 +1127,12 @@ function TerminalSessionViewport({
       terminalRef.current?.focus();
       return mount.contains(document.activeElement);
     };
-    if (autoFocus) focus();
+    // Once per viewport: a re-attached ref (a fresh callback identity) must not
+    // pull focus back on every render of a chatty terminal.
+    if (autoFocus && !autoFocusedRef.current) {
+      autoFocusedRef.current = true;
+      focus();
+    }
     const unregister = registerTerminalFocusTarget({
       threadRef,
       terminalId,

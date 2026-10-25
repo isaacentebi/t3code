@@ -30,6 +30,10 @@ const focusTargets = new Set<TerminalFocusTarget>();
 // One request at a time: the newest terminal the user asked for wins, so an
 // older request never fires later and steals focus.
 let pendingFocus: { readonly threadKey: string; readonly terminalId: string } | null = null;
+// The thread the latest request named. It outlives `pendingFocus`: the new
+// thread's viewports mount and consume a navigating handler's request in the
+// commit's layout phase, before ChatView's thread-enter effect runs.
+let lastRequestedThreadKey: string | null = null;
 
 function isPending(threadKey: string, terminalId: string): boolean {
   return pendingFocus?.threadKey === threadKey && pendingFocus.terminalId === terminalId;
@@ -55,6 +59,7 @@ function focusMountedTarget(threadKey: string, terminalId: string): boolean {
  */
 export function focusTerminal(threadRef: ScopedThreadRef, terminalId: string): void {
   const threadKey = scopedThreadKey(threadRef);
+  lastRequestedThreadKey = threadKey;
   pendingFocus = focusMountedTarget(threadKey, terminalId) ? null : { threadKey, terminalId };
 }
 
@@ -99,10 +104,12 @@ export function focusPanelTerminalAfterClose(
 /**
  * Entering a thread with its drawer open focuses the drawer terminal. A request
  * the navigating handler already made for this thread (a sidebar terminal
- * reveal) wins.
+ * reveal) wins, whether or not its viewport has taken focus yet.
  */
 export function focusTerminalOnThreadEnter(threadRef: ScopedThreadRef): void {
-  if (pendingFocus?.threadKey === scopedThreadKey(threadRef)) return;
+  const requestedByHandler = lastRequestedThreadKey === scopedThreadKey(threadRef);
+  lastRequestedThreadKey = null;
+  if (requestedByHandler) return;
   const { terminalOpen, activeTerminalId } = selectThreadTerminalUiState(
     useTerminalUiStateStore.getState().terminalUiStateByThreadKey,
     threadRef,

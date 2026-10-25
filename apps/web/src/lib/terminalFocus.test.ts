@@ -182,8 +182,9 @@ describe("focusTerminal", () => {
     const ref = threadRef("revealed");
     useTerminalUiStateStore.getState().ensureTerminal(ref, "drawer", { open: true, active: true });
     focusTerminal(ref, "panel");
-    focusTerminalOnThreadEnter(ref);
 
+    // React commit order: the new thread's viewports attach and take the
+    // request before ChatView's thread-enter effect runs.
     const drawer = vi.fn(() => true);
     const unregisterDrawer = registerTerminalFocusTarget({
       threadRef: ref,
@@ -196,11 +197,32 @@ describe("focusTerminal", () => {
       terminalId: "panel",
       focus: panel,
     });
+    focusTerminalOnThreadEnter(ref);
 
     expect(drawer).not.toHaveBeenCalled();
     expect(panel).toHaveBeenCalledTimes(1);
     unregisterDrawer();
     unregisterPanel();
+  });
+
+  it("a handler's request only outranks the next thread entry", () => {
+    const ref = threadRef("revisited");
+    useTerminalUiStateStore.getState().ensureTerminal(ref, "drawer", { open: true, active: true });
+    focusTerminal(ref, "panel");
+    focusTerminalOnThreadEnter(ref);
+
+    const drawer = vi.fn(() => true);
+    const unregisterDrawer = registerTerminalFocusTarget({
+      threadRef: ref,
+      terminalId: "drawer",
+      focus: drawer,
+    });
+    focusTerminal(ref, "panel");
+    focusTerminalOnThreadEnter(threadRef("elsewhere"));
+    focusTerminalOnThreadEnter(ref);
+
+    expect(drawer).toHaveBeenCalledTimes(1);
+    unregisterDrawer();
   });
 
   it("focuses the panel terminal a closed surface falls back to", () => {
