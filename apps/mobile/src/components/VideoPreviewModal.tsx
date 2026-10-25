@@ -63,6 +63,7 @@ function useLocalPlayback(source: LocalVideoPreviewSource): PlaybackState {
     loadLocalAttachmentPreview(attachment, signal),
   );
   const { id: attachmentId, fileUri } = attachment;
+  /* oxlint-disable react/set-state-in-effect -- A new native media resource clears the previous resource’s result before loading. */
   useEffect(
     () => {
       setUri(null);
@@ -94,6 +95,7 @@ function useLocalPlayback(source: LocalVideoPreviewSource): PlaybackState {
       fileUri,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
   const mimeType = videoMimeType(attachment) ?? attachment.mimeType;
   return {
     uri,

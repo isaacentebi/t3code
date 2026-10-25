@@ -273,11 +273,13 @@ function ThreadNavigationSidebarPane(
   const [now, setNow] = useState(() => new Date().toISOString());
   const nowMinute = now.slice(0, 16);
   const [snoozeWakeTick, bumpSnoozeWakeTick] = useState(0);
+  /* oxlint-disable react/set-state-in-effect -- The foreground clock is refreshed on mount before its minute interval begins. */
   useEffect(() => {
     setNow(new Date().toISOString());
     const id = setInterval(() => setNow(new Date().toISOString()), 60_000);
     return () => clearInterval(id);
   }, []);
+  /* oxlint-enable react/set-state-in-effect */
   const listEnvironments = useAtomValue(threadListEnvironmentsAtom);
   const {
     providersByEnvironmentId,

@@ -149,6 +149,7 @@ export function FileTreeBrowser(props: {
     searchResultPaths: props.searchResultPaths,
   });
 
+  /* oxlint-disable react/set-state-in-effect -- An externally selected file expands its ancestor folders in the interactive tree. */
   useEffect(() => {
     if (!controlledSelectedPath) {
       return;
@@ -165,6 +166,7 @@ export function FileTreeBrowser(props: {
       return next;
     });
   }, [controlledSelectedPath]);
+  /* oxlint-enable react/set-state-in-effect */
 
   useEffect(() => {
     for (const path of expandedPaths) onLoadDirectory(path);

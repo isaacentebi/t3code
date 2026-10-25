@@ -80,12 +80,14 @@ export function useGitActionProgress(target: VcsActionTarget): GitActionProgress
 
   // Keep clock state; the compiler caches render-time Date.now() and would freeze the label.
   const [nowMs, setNowMs] = useState(() => Date.now());
+  /* oxlint-disable react/set-state-in-effect -- Starting an action needs an immediate clock sample before interval updates begin. */
   useEffect(() => {
     if (!actionState.isRunning) return;
     setNowMs(Date.now());
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [actionState.isRunning]);
+  /* oxlint-enable react/set-state-in-effect */
 
   if (actionState.isRunning) {
     const description =

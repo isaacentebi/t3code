@@ -636,6 +636,7 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
     ],
   );
 
+  /* oxlint-disable react/set-state-in-effect -- The native terminal consumes queued launches and restores grid state when its session changes. */
   useEffect(() => {
     if (pendingLaunchEntry.key === launchTargetKey) {
       return;
@@ -645,7 +646,9 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
       launch: launchTarget === null ? null : takePendingTerminalLaunch(launchTarget),
     });
   }, [launchTarget, launchTargetKey, pendingLaunchEntry.key]);
+  /* oxlint-enable react/set-state-in-effect */
 
+  /* oxlint-disable react/set-state-in-effect -- The native terminal consumes queued launches and restores grid state when its session changes. */
   useEffect(() => {
     if (initialAttachGridEntry.key === launchTargetKey) {
       return;
@@ -658,6 +661,7 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
       },
     });
   }, [cachedRouteGridSize, initialAttachGridEntry.key, launchTargetKey]);
+  /* oxlint-enable react/set-state-in-effect */
 
   useEffect(() => {
     if (!shouldRedirectToRunningTerminal || !selectedThread || !runningSession) {
@@ -746,6 +750,7 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
 
   useEffect(() => clearBufferReplayTimer, [clearBufferReplayTimer]);
 
+  /* oxlint-disable react/set-state-in-effect -- The native terminal consumes queued launches and restores grid state when its session changes. */
   useEffect(() => {
     if (!routeEnvironmentId || !routeThreadId) {
       setLastGridSize({
@@ -767,6 +772,7 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
     );
     setHasMeasuredSurface(true);
   }, [routeEnvironmentId, routeThreadId, terminalId]);
+  /* oxlint-enable react/set-state-in-effect */
 
   const writeInput = useCallback(
     async (data: string): Promise<boolean> => {

@@ -110,11 +110,13 @@ export function useInitialTerminalLaunchLocation(input: {
     }
   }
   const [entry, setEntry] = useState(() => ({ key: input.targetKey, location: candidate }));
+  /* oxlint-disable react/set-state-in-effect -- Latch externally queued launch locations so consuming the queue does not erase the current launch. */
   useEffect(() => {
     if (entry.key === input.targetKey && (entry.location !== null || candidate === null)) {
       return;
     }
     setEntry({ key: input.targetKey, location: candidate });
   }, [candidate, entry.key, entry.location, input.targetKey]);
+  /* oxlint-enable react/set-state-in-effect */
   return entry.key === input.targetKey ? entry.location : null;
 }

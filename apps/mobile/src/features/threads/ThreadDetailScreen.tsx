@@ -474,6 +474,7 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
       subscription.remove();
     };
   }, []);
+  /* oxlint-disable react/set-state-in-effect -- Native keyboard and thread transitions must reset the associated scroll and keyboard state. */
   useEffect(
     () => {
       setKeyboardStateSuspect(false);
@@ -483,6 +484,7 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
       liveKeyboardHeight,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
   const handleOwnedInputFocusChange = (focused: boolean) => {
     ownedInputFocusedRef.current = focused;
     if (focused) {
@@ -886,11 +888,13 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
   // A height React sets from keyboard state lags the sticky translation by a Yoga pass and
   // flashes over the nav header on the way up, so the usage panel reserves the keyboard instead.
   const [lastKnownKeyboardHeight, setLastKnownKeyboardHeight] = useState(0);
+  /* oxlint-disable react/set-state-in-effect -- Native keyboard and thread transitions must reset the associated scroll and keyboard state. */
   useEffect(() => {
     if (liveKeyboardHeight > 0 && liveKeyboardHeight !== lastKnownKeyboardHeight) {
       setLastKnownKeyboardHeight(liveKeyboardHeight);
     }
   }, [lastKnownKeyboardHeight, liveKeyboardHeight]);
+  /* oxlint-enable react/set-state-in-effect */
   const reservedKeyboardHeight =
     lastKnownKeyboardHeight > 0 ? lastKnownKeyboardHeight : ESTIMATED_KEYBOARD_HEIGHT;
   // Waiting for a visibility render misses the first keyboard frames.
@@ -1147,6 +1151,7 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
     selectedThreadKeyRef.current = selectedThreadKey;
   }, [selectedThreadKey]);
 
+  /* oxlint-disable react/set-state-in-effect -- Native keyboard and thread transitions must reset the associated scroll and keyboard state. */
   useEffect(
     () => {
       setAnchorMessageId(null);
@@ -1161,6 +1166,7 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
       selectedThreadKey,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
 
   useEffect(() => {
     if (

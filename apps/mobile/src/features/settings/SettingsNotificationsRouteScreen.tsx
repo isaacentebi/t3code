@@ -115,6 +115,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     setNotificationStatus(result.value.granted ? "enabled" : "disabled");
   };
 
+  /* oxlint-disable react/set-state-in-effect -- Native notification permissions and persisted preferences determine the displayed operation status. */
   useEffect(() => {
     void refreshNotifications();
     const subscription = AppState.addEventListener("change", (state) => {
@@ -122,7 +123,9 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     });
     return () => subscription.remove();
   }, [refreshNotifications]);
+  /* oxlint-enable react/set-state-in-effect */
 
+  /* oxlint-disable react/set-state-in-effect -- Native notification permissions and persisted preferences determine the displayed operation status. */
   useEffect(() => {
     if (!isLoaded) {
       setLiveActivityStatus("checking");
@@ -145,6 +148,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       preferencesResult.value.liveActivitiesEnabled === false ? "disabled" : "enabled",
     );
   }, [isLoaded, isSignedIn, preferencesResult]);
+  /* oxlint-enable react/set-state-in-effect */
 
   const requestNotifications = async () => {
     const result = await settleAsyncResult(() =>

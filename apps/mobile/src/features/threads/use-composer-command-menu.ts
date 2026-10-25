@@ -217,6 +217,7 @@ export function useComposerCommandMenu({
   const onSelectionChange = (nextSelection: ComposerEditorSelection) => {
     setSelection(nextSelection);
   };
+  /* oxlint-disable react/set-state-in-effect -- The composer synchronizes native insertion selection and external workspace refresh state. */
   useEffect(() => {
     const inserted = ownerKey ? readComposerDraftSelection(ownerKey, draftMessage) : null;
     if (inserted) {
@@ -235,6 +236,7 @@ export function useComposerCommandMenu({
       return { start, end: selectionEnd };
     });
   }, [draftMessage, ownerKey]);
+  /* oxlint-enable react/set-state-in-effect */
   useEffect(() => {
     if (previousOwnerKeyRef.current === ownerKey) return;
     previousOwnerKeyRef.current = ownerKey;
@@ -290,6 +292,7 @@ export function useComposerCommandMenu({
     }
     hadWorkspaceSnapshotRef.current = hasWorkspaceSnapshot;
   }, [hasWorkspaceSnapshot]);
+  /* oxlint-disable react/set-state-in-effect -- The composer synchronizes native insertion selection and external workspace refresh state. */
   useEffect(
     () => {
       if (!environmentId || !projectCwd || !selectedProviderInstanceId) return;
@@ -348,6 +351,7 @@ export function useComposerCommandMenu({
       workspaceRefreshRetry,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
 
   const trigger = (() => {
     if (!enabled || selection.start !== selection.end) {

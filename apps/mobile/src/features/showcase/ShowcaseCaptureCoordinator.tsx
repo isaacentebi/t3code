@@ -117,6 +117,7 @@ function EnabledShowcaseCaptureCoordinator(props: { readonly pathname: string })
     return () => clearInterval(interval);
   }, [pairingUrls.length]);
 
+  /* oxlint-disable react/set-state-in-effect -- Native capture readiness is synchronized with orientation and fixture lifecycle completion. */
   useEffect(() => {
     if (orientationSettled) return;
     const orientation = getNativeShowcaseOrientation();
@@ -135,6 +136,7 @@ function EnabledShowcaseCaptureCoordinator(props: { readonly pathname: string })
       cancelled = true;
     };
   }, [orientationSettled]);
+  /* oxlint-enable react/set-state-in-effect */
 
   useEffect(() => {
     const readRequestedScene = () => {
@@ -284,6 +286,7 @@ function EnabledShowcaseCaptureCoordinator(props: { readonly pathname: string })
     };
   }, [agentActivityStaged, hasFixture, scene]);
 
+  /* oxlint-disable react/set-state-in-effect -- Native capture readiness is synchronized with orientation and fixture lifecycle completion. */
   useEffect(() => {
     if (
       scene === null ||
@@ -325,6 +328,7 @@ function EnabledShowcaseCaptureCoordinator(props: { readonly pathname: string })
     themeApplied,
     themeId,
   ]);
+  /* oxlint-enable react/set-state-in-effect */
 
   if (readyScene === null) return null;
 

@@ -89,6 +89,7 @@ function LoadedMediaVideo(props: {
     return () => subscription.remove();
   }, [focused, playback, paused]);
 
+  /* oxlint-disable react/set-state-in-effect -- Starting a native media load must publish pending state before its asynchronous result. */
   useEffect(
     () => {
       const controller = new AbortController();
@@ -110,6 +111,7 @@ function LoadedMediaVideo(props: {
       attempt,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
 
   return (
     <View collapsable={false} style={{ flex: 1 }}>

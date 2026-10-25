@@ -422,6 +422,7 @@ export function NewTaskFlowProvider(
     : selectedProject
       ? activeDraftKey
       : null;
+  /* oxlint-disable react/set-state-in-effect -- Create a persistent draft only after the external project selection is ready. */
   useEffect(() => {
     if (
       props.active === false ||
@@ -438,6 +439,7 @@ export function NewTaskFlowProvider(
       }),
     );
   }, [activeDraftKey, editingPendingTask, selectedProject, props.active]);
+  /* oxlint-enable react/set-state-in-effect */
   const activePendingKey =
     props.active === false
       ? null

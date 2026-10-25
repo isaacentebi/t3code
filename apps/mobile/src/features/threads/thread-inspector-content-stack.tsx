@@ -57,6 +57,7 @@ export function ThreadInspectorContentStack(props: {
     () => new Set([props.mode]),
   );
 
+  /* oxlint-disable react/set-state-in-effect -- Keep opened native inspector views mounted and prewarm their alternate to preserve UIKit focus. */
   useEffect(() => {
     setMountedModes((current) => {
       if (current.has(props.mode)) {
@@ -82,6 +83,7 @@ export function ThreadInspectorContentStack(props: {
 
     return () => clearTimeout(timeout);
   }, [props.mode]);
+  /* oxlint-enable react/set-state-in-effect */
 
   return (
     <View className="flex-1">

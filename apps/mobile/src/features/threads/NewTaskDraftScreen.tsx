@@ -350,6 +350,7 @@ export function NewTaskDraftScreen(props: {
       navigation.goBack();
     }
   }, [cancelledIncomingShareId, navigation, props.incomingShareId]);
+  /* oxlint-disable react/set-state-in-effect -- Route selection and incoming-share transfers synchronize external draft state with this mounted screen. */
   useEffect(() => {
     if (!isReturningToProjectPicker) {
       return;
@@ -371,6 +372,7 @@ export function NewTaskDraftScreen(props: {
     props.incomingShareId,
     requestedInitialProjectAvailable,
   ]);
+  /* oxlint-enable react/set-state-in-effect */
   useEffect(() => {
     if (!shareImportMountedRef.current) {
       startedShareImportKeyRef.current = null;
@@ -439,6 +441,7 @@ export function NewTaskDraftScreen(props: {
 
   const lastInitialProjectRefRef = useRef(props.initialProjectRef);
 
+  /* oxlint-disable react/set-state-in-effect -- Route selection and incoming-share transfers synchronize external draft state with this mounted screen. */
   useEffect(
     () => {
       if (props.pendingTaskId || props.draftId) {
@@ -524,6 +527,7 @@ export function NewTaskDraftScreen(props: {
       setProject,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
 
   const { loadBranches } = flow;
   useEffect(() => {
@@ -539,6 +543,7 @@ export function NewTaskDraftScreen(props: {
     loadBranches();
   }, [selectedProject, loadBranches]);
 
+  /* oxlint-disable react/set-state-in-effect -- Route selection and incoming-share transfers synchronize external draft state with this mounted screen. */
   useEffect(
     () => {
       const shareId = props.incomingShareId;
@@ -770,6 +775,7 @@ export function NewTaskDraftScreen(props: {
       shareImportAttempt,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
 
   const selectedEnvironmentLabel =
     flow.environments.find(

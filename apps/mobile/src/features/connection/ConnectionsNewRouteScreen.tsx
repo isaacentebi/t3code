@@ -75,12 +75,15 @@ export function ConnectionsNewRouteScreen({
 
   const connectDisabled = isSubmitting || hostInput.trim().length === 0;
 
+  /* oxlint-disable react/set-state-in-effect -- An incoming pairing URL and external pairing failure update this editable form. */
   useEffect(() => {
     const { host, code } = parsePairingUrl(connectionPairingUrl);
     setHostInput(host);
     setCodeInput(code);
   }, [connectionPairingUrl]);
+  /* oxlint-enable react/set-state-in-effect */
 
+  /* oxlint-disable react/set-state-in-effect -- An incoming pairing URL and external pairing failure update this editable form. */
   useEffect(() => {
     if (routePairingUrl.length === 0) {
       return;
@@ -90,12 +93,15 @@ export function ConnectionsNewRouteScreen({
     setHostInput(host);
     setCodeInput(code);
   }, [routePairingUrl]);
+  /* oxlint-enable react/set-state-in-effect */
 
+  /* oxlint-disable react/set-state-in-effect -- An incoming pairing URL and external pairing failure update this editable form. */
   useEffect(() => {
     if (pairingConnectionError) {
       setIsSubmitting(false);
     }
   }, [pairingConnectionError]);
+  /* oxlint-enable react/set-state-in-effect */
 
   const handleHostChange = (value: string) => {
     setHostInput(value);

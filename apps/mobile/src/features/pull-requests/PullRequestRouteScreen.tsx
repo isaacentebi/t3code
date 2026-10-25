@@ -383,6 +383,7 @@ export function PullRequestRouteScreen({ route }: StaticScreenProps<PullRequestP
     scrollViews.current[next]?.scrollToOffset({ offset, animated: false });
     setSection(next);
   };
+  /* oxlint-disable react/set-state-in-effect -- When guide support disappears, native tab selection and its saved scroll offset must switch together. */
   useEffect(() => {
     if (!guidesEnabled && section === "guide") {
       requestedSection.current = "overview";
@@ -390,6 +391,7 @@ export function PullRequestRouteScreen({ route }: StaticScreenProps<PullRequestP
       setSection("overview");
     }
   }, [guidesEnabled, section, insets.top, currentScrollOffset, requestedSection, scrollOffsets]);
+  /* oxlint-enable react/set-state-in-effect */
   const tabContent = activityContent;
   const filesY = useRef(0);
   const descriptionY = useRef(0);

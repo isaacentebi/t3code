@@ -2215,6 +2215,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     props.threadId,
     fileShareSourceIdentifier,
   );
+  /* oxlint-disable react/set-state-in-effect -- Native feed navigation must close stale media or unfold the requested message before scrolling. */
   useEffect(
     () => {
       setExpandedVideo(null);
@@ -2226,6 +2227,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       props.contentPresentation.kind,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
   const horizontalPadding = props.layoutVariant === "split" ? 20 : 16;
   const contentLeftInset = props.contentSideInsets?.left ?? 0;
   const contentRightInset = props.contentSideInsets?.right ?? 0;
@@ -2763,6 +2765,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const { jumpToMessageId } = props;
   const finishJump = useEffectEvent(() => props.onJumpedToMessage?.());
   const stopFollowingEnd = useEffectEvent(() => setEndFollow(false));
+  /* oxlint-disable react/set-state-in-effect -- Native feed navigation must close stale media or unfold the requested message before scrolling. */
   useEffect(() => {
     if (!jumpToMessageId || loadedListKey !== listMountKey) return;
     const index = presentedFeed.findIndex(
@@ -2796,6 +2799,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     presentedFeed,
     props.feed,
   ]);
+  /* oxlint-enable react/set-state-in-effect */
 
   const reflowLayout = () => ({
     rowsTop: FEED_PADDING_TOP + listHeaderSizeRef.current,

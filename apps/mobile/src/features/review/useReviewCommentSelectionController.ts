@@ -102,6 +102,7 @@ export function useReviewCommentSelectionController(input: {
     selectedSection?.title,
   ]);
 
+  /* oxlint-disable react/set-state-in-effect -- Native comment selection must clear when the active review target changes. */
   useEffect(
     () => {
       clearReviewCommentTarget();
@@ -111,12 +112,15 @@ export function useReviewCommentSelectionController(input: {
       selectedSection?.id,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
 
+  /* oxlint-disable react/set-state-in-effect -- Native comment selection must clear when the active review target changes. */
   useEffect(() => {
     if (activeCommentTarget === null) {
       setPendingNativeCommentSelection(null);
     }
   }, [activeCommentTarget]);
+  /* oxlint-enable react/set-state-in-effect */
 
   const onPressLine = useCallback(
     (

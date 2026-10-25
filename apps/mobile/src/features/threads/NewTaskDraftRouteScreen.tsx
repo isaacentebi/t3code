@@ -35,10 +35,12 @@ export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraf
   const { reset } = useNewTaskFlow();
   const { deferThreadSelectionUntil } = useAdaptiveWorkspaceLayout();
   const [initialized, setInitialized] = useState(false);
+  /* oxlint-disable react/set-state-in-effect -- Draft reset and serialized Git checkout operations publish their lifecycle state after mount. */
   useLayoutEffect(() => {
     reset();
     setInitialized(true);
   }, [reset]);
+  /* oxlint-enable react/set-state-in-effect */
   const pendingTaskId = Array.isArray(params.pendingTaskId)
     ? params.pendingTaskId[0]
     : params.pendingTaskId;
@@ -86,6 +88,7 @@ export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraf
         catalogState.hasConnectingEnvironment &&
         catalogState.connectionError === null));
 
+  /* oxlint-disable react/set-state-in-effect -- Draft reset and serialized Git checkout operations publish their lifecycle state after mount. */
   useEffect(() => {
     if (!needsPreparation || !initialProjectRef.branch || waitingForProject) return;
     const branchName = initialProjectRef.branch;
@@ -128,6 +131,7 @@ export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraf
     switchRef,
     waitingForProject,
   ]);
+  /* oxlint-enable react/set-state-in-effect */
 
   const result =
     preparation?.request === initialProjectRef && preparation.workspaceRoot === workspaceRoot

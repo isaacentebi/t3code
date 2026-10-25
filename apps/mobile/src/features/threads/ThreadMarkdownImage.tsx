@@ -48,6 +48,7 @@ export function ThreadMarkdownImageView(props: {
   const [decodedSize, setDecodedSize] = useState<{ width: number; height: number } | null>(null);
   const [failedUri, setFailedUri] = useState<string | null>(null);
 
+  /* oxlint-disable react/set-state-in-effect -- The native image’s decoded size and failure state belong to its current source. */
   useEffect(
     () => {
       setDecodedSize(null);
@@ -56,7 +57,9 @@ export function ThreadMarkdownImageView(props: {
       props.sourceKey,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
 
+  /* oxlint-disable react/set-state-in-effect -- The native image’s decoded size and failure state belong to its current source. */
   useEffect(
     () => {
       setFailedUri(null);
@@ -65,6 +68,7 @@ export function ThreadMarkdownImageView(props: {
       props.uri,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
 
   const sourceSize = decodedSize ?? props.knownSize ?? null;
   const displaySize: MarkdownImageDisplaySize | null =

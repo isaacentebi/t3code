@@ -69,9 +69,11 @@ function NativeVideoPreview(props: {
     fullscreenVideoOpened();
     return () => fullscreenVideoClosed();
   }, []);
+  /* oxlint-disable react/set-state-in-effect -- The native player latches the first resolved playback URL to preserve its playback session. */
   useEffect(() => {
     if (playbackUrl === null && resolvedUrl !== null) setPlaybackUrl(resolvedUrl);
   }, [playbackUrl, resolvedUrl]);
+  /* oxlint-enable react/set-state-in-effect */
   useEffect(() => {
     if (!loadError) return;
     Dialog.alert("Could not open video", loadError);

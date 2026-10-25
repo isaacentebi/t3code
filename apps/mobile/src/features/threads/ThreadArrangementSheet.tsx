@@ -298,6 +298,7 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
   const orderVersion = rows
     .map((row) => `${row.key}:${row.thread?.pinOrderKey}:${row.thread?.activeOrderKey}`)
     .join("|");
+  /* oxlint-disable react/set-state-in-effect -- An external order change cancels the native drag and clears its preview together. */
   useEffect(
     () => {
       stop();
@@ -307,6 +308,7 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
       stop,
     ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
+  /* oxlint-enable react/set-state-in-effect */
   useEffect(
     () => () => {
       if (frame.current !== null) cancelAnimationFrame(frame.current);

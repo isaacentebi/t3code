@@ -430,6 +430,7 @@ function ThreadRouteContent(
     toggleAuxiliaryPane,
   ]);
 
+  /* oxlint-disable react/set-state-in-effect -- The native inspector selection follows route ownership while preserving an explicitly opened inspector. */
   useEffect(() => {
     setInspectorSelection((current) => {
       if (props.renderInspector === undefined) {
@@ -446,6 +447,7 @@ function ThreadRouteContent(
       return { ...current, routeThreadIdentity };
     });
   }, [props.renderInspector, routeThreadIdentity]);
+  /* oxlint-enable react/set-state-in-effect */
 
   const revealPreview = useEffectEvent(() => showAuxiliaryPane("inspector"));
   useEffect(() => {

@@ -164,6 +164,7 @@ function ProjectFaviconImage(props: {
     [props.cacheKey, props.faviconUrl],
   );
   const [activeFaviconRequest, setActiveFaviconRequest] = useState<typeof faviconRequest>(null);
+  /* oxlint-disable react/set-state-in-effect -- Registering the external favicon request must publish the exact active request until cleanup. */
   useLayoutEffect(() => {
     if (faviconRequest === null) return;
 
@@ -171,6 +172,7 @@ function ProjectFaviconImage(props: {
     setActiveFaviconRequest(faviconRequest);
     return endRequest;
   }, [faviconRequest]);
+  /* oxlint-enable react/set-state-in-effect */
 
   const [status, setStatus] = useState<"loading" | "loaded" | "error">(() =>
     props.faviconUrl?.startsWith("data:") || hasLoadedProjectFavicon(props.cacheKey)

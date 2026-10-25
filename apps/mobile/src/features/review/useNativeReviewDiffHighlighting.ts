@@ -48,6 +48,7 @@ export function useNativeReviewDiffHighlighting(input: {
     ),
   );
 
+  /* oxlint-disable react/set-state-in-effect -- Resetting the native highlighter must clear React’s viewport and token-patch snapshots together. */
   useEffect(() => {
     traceDiffHighlight("viewport-reset", {
       reset: diffHighlightTraceId(resetKey),
@@ -64,6 +65,7 @@ export function useNativeReviewDiffHighlighting(input: {
     if (previousRange) scheduler.update(previousRange);
     return () => scheduler.cancel();
   }, [enabled, resetKey, rows.length, scheduler, viewportScope]);
+  /* oxlint-enable react/set-state-in-effect */
 
   useEffect(() => {
     if (!enabled || rows.length === 0 || !viewport.range || viewport.scope !== viewportScope) {
