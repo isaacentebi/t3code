@@ -216,6 +216,7 @@ export default defineConfig({
       perf: "warn",
     },
     rules: {
+      "react/no-object-type-as-default-prop": "off",
       "react/jsx-no-constructed-context-values": "off",
       "react/purity": "off",
       "eslint/no-unsafe-optional-chaining": "error",
