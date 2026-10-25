@@ -2985,7 +2985,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                         }
                       : null,
                   ),
-                  Effect.catch(() => Effect.succeed(null)),
+                  Effect.orElseSucceed(() => null),
                   Effect.filterOrElse(
                     (response) => !(response === null),
                     (response) =>
