@@ -2640,7 +2640,7 @@ export default function ChatView(props: ChatViewProps) {
   // it from a handler requests focus there. A closed drawer leaves focus to the
   // composer effect above.
   useEffect(() => {
-    if (activeThreadRef) focusTerminalOnThreadEnter(activeThreadRef);
+    if (activeThreadRef) return focusTerminalOnThreadEnter(activeThreadRef);
   }, [activeThreadRef]);
 
   const getShortcutContext = (eventTarget: EventTarget | null = document.activeElement) => ({
