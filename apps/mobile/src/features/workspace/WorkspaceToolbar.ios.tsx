@@ -115,11 +115,18 @@ export function WorkspaceToolbar(props: {
       return () => cancelAnimationFrame(frame);
     }, [restoreSearch]),
   );
-  useEffect(() => {
-    if (!tabActive) return;
-    const frame = requestAnimationFrame(restoreSearch);
-    return () => cancelAnimationFrame(frame);
-  }, [restoreSearch, tabActive, bottomSearch]);
+  useEffect(
+    () => {
+      if (!tabActive) return;
+      const frame = requestAnimationFrame(restoreSearch);
+      return () => cancelAnimationFrame(frame);
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Moving the native search host requires restoring its current search state. */ [
+      restoreSearch,
+      tabActive,
+      bottomSearch,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   const composeButton = nativeToolbarCompose ? (
     <Toolbar.Button
       identifier="workspace-compose"

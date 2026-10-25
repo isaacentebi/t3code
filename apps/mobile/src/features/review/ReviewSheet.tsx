@@ -451,9 +451,16 @@ export function ReviewSheet(props: ReviewSheetProps) {
   const bottomContentInset =
     Platform.OS === "ios" ? safeArea.bottom + 8 : Math.max(insets.bottom, 18) + 18;
 
-  useEffect(() => {
-    showAuxiliaryPane("inspector");
-  }, [environmentId, showAuxiliaryPane, threadId]);
+  useEffect(
+    () => {
+      showAuxiliaryPane("inspector");
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Opening review for another thread reselects its inspector pane. */ [
+      environmentId,
+      showAuxiliaryPane,
+      threadId,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   const {
     error,
     reviewSections,

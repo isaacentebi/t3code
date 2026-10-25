@@ -79,7 +79,9 @@ export function ComposerEditor({
     () => () => {
       importRef.current?.abort();
     },
-    [draftKey],
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Switching drafts must abort an import owned by the previous draft. */ [
+      draftKey,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
   );
   const pasteContext = async (
     clipboard: Parameters<NonNullable<NativeComposerEditorProps["onPasteContext"]>>[0],

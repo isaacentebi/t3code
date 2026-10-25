@@ -216,6 +216,7 @@ export default defineConfig({
       perf: "warn",
     },
     rules: {
+      "react/exhaustive-effect-dependencies": "error",
       "react/memo-dependencies": "error",
       "react/refs": "error",
       "react/immutability": "error",

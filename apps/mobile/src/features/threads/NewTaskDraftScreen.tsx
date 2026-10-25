@@ -439,89 +439,93 @@ export function NewTaskDraftScreen(props: {
 
   const lastInitialProjectRefRef = useRef(props.initialProjectRef);
 
-  useEffect(() => {
-    if (props.pendingTaskId || props.draftId) {
-      return;
-    }
-    if (lastInitialProjectRefRef.current !== props.initialProjectRef) {
-      lastInitialProjectRefRef.current = props.initialProjectRef;
-      appliedInitialProjectKeyRef.current = null;
-    }
-    const initialEnvironmentId = props.initialProjectRef?.environmentId;
-    const initialProjectId = props.initialProjectRef?.projectId;
-    if (initialEnvironmentId && initialProjectId) {
-      const directProject =
-        projects.find(
-          (project) =>
-            project.environmentId === initialEnvironmentId && project.id === initialProjectId,
-        ) ?? null;
+  useEffect(
+    () => {
+      if (props.pendingTaskId || props.draftId) {
+        return;
+      }
+      if (lastInitialProjectRefRef.current !== props.initialProjectRef) {
+        lastInitialProjectRefRef.current = props.initialProjectRef;
+        appliedInitialProjectKeyRef.current = null;
+      }
+      const initialEnvironmentId = props.initialProjectRef?.environmentId;
+      const initialProjectId = props.initialProjectRef?.projectId;
+      if (initialEnvironmentId && initialProjectId) {
+        const directProject =
+          projects.find(
+            (project) =>
+              project.environmentId === initialEnvironmentId && project.id === initialProjectId,
+          ) ?? null;
 
-      if (directProject) {
-        // Apply the route project once or picker changes would immediately revert.
-        const directProjectKey = `${directProject.environmentId}:${directProject.id}`;
-        if (appliedInitialProjectKeyRef.current === directProjectKey) {
-          return;
-        }
-        if (props.initialProjectRef?.branch) {
-          if (
-            selectedProject?.environmentId !== directProject.environmentId ||
-            selectedProject.id !== directProject.id
-          ) {
-            setProject(directProject);
+        if (directProject) {
+          // Apply the route project once or picker changes would immediately revert.
+          const directProjectKey = `${directProject.environmentId}:${directProject.id}`;
+          if (appliedInitialProjectKeyRef.current === directProjectKey) {
             return;
           }
-          if (!flow.draftKey) return;
-          // Checkout completed before mount; local mode reuses it while worktree mode would create another.
-          updateComposerDraftSettings(flow.draftKey, {
-            workspaceSelection: {
-              mode: "local",
-              branch: props.initialProjectRef.branch,
-              worktreePath: props.initialProjectRef.worktreePath ?? null,
-              startFromOrigin: false,
-            },
-          });
-        }
-        appliedInitialProjectKeyRef.current = directProjectKey;
-        if (
-          selectedProject?.environmentId === directProject.environmentId &&
-          selectedProject.id === directProject.id
-        ) {
+          if (props.initialProjectRef?.branch) {
+            if (
+              selectedProject?.environmentId !== directProject.environmentId ||
+              selectedProject.id !== directProject.id
+            ) {
+              setProject(directProject);
+              return;
+            }
+            if (!flow.draftKey) return;
+            // Checkout completed before mount; local mode reuses it while worktree mode would create another.
+            updateComposerDraftSettings(flow.draftKey, {
+              workspaceSelection: {
+                mode: "local",
+                branch: props.initialProjectRef.branch,
+                worktreePath: props.initialProjectRef.worktreePath ?? null,
+                startFromOrigin: false,
+              },
+            });
+          }
+          appliedInitialProjectKeyRef.current = directProjectKey;
+          if (
+            selectedProject?.environmentId === directProject.environmentId &&
+            selectedProject.id === directProject.id
+          ) {
+            return;
+          }
+          setProject(directProject);
           return;
         }
-        setProject(directProject);
+
+        if (projects.length > 0) {
+          setIsReturningToProjectPicker(true);
+        }
         return;
       }
 
-      if (projects.length > 0) {
-        setIsReturningToProjectPicker(true);
+      const selection = resolveDraftProjectSelection(selectedProjectKey, projects, projectScopes);
+      if (selection.kind === "preserve") {
+        return;
       }
-      return;
-    }
+      if (selection.kind === "select") {
+        setProject(selection.project);
+        return;
+      }
 
-    const selection = resolveDraftProjectSelection(selectedProjectKey, projects, projectScopes);
-    if (selection.kind === "preserve") {
-      return;
-    }
-    if (selection.kind === "select") {
-      setProject(selection.project);
-      return;
-    }
+      navigation.dispatch(CommonActions.navigate("NewTaskProject"));
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- A new share restarts project selection for its draft. */ [
+      projectScopes,
+      projects,
+      flow.draftKey,
+      props.initialProjectRef,
+      props.incomingShareId,
+      props.pendingTaskId,
+      props.draftId,
+      navigation,
+      selectedProject,
+      selectedProjectKey,
+      setProject,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
-    navigation.dispatch(CommonActions.navigate("NewTaskProject"));
-  }, [
-    projectScopes,
-    projects,
-    flow.draftKey,
-    props.initialProjectRef,
-    props.incomingShareId,
-    props.pendingTaskId,
-    props.draftId,
-    navigation,
-    selectedProject,
-    selectedProjectKey,
-    setProject,
-  ]);
-
+  const { loadBranches } = flow;
   useEffect(() => {
     if (!selectedProject) {
       loadedBranchesProjectKeyRef.current = null;
@@ -532,232 +536,240 @@ export function NewTaskDraftScreen(props: {
       return;
     }
     loadedBranchesProjectKeyRef.current = projectKey;
-    flow.loadBranches();
-  }, [flow.loadBranches, selectedProject]);
+    loadBranches();
+  }, [selectedProject, loadBranches]);
 
-  useEffect(() => {
-    const shareId = props.incomingShareId;
-    const draftKey = flow.draftKey;
-    const destinationProject = selectedProject;
-    const initialEnvironmentId = props.initialProjectRef?.environmentId;
-    const initialProjectId = props.initialProjectRef?.projectId;
-    const selectedProjectMatchesRoute =
-      !initialEnvironmentId ||
-      !initialProjectId ||
-      (destinationProject?.environmentId === initialEnvironmentId &&
-        destinationProject.id === initialProjectId);
-    if (
-      !shareId ||
-      !draftKey ||
-      !destinationProject ||
-      !selectedProjectMatchesRoute ||
-      cancelledIncomingShareId === shareId
-    ) {
-      return;
-    }
-    const importKey = `${shareId}:${draftKey}`;
-    if (
-      startedShareImportKeyRef.current === importKey ||
-      cancellingShareImportKeyRef.current === importKey
-    ) {
-      return;
-    }
-
-    if (!incomingShare) {
-      if (isIncomingShareUnavailable && alertedUnavailableIncomingShareIdRef.current !== shareId) {
-        alertedUnavailableIncomingShareIdRef.current = shareId;
-        Dialog.alert(
-          "Shared content unavailable",
-          "The shared content is no longer in the inbox. You can continue editing this task draft.",
-        );
-      }
-      return;
-    }
-
-    if (
-      incomingShare.attachments.some((attachment) => attachment.type === "file") &&
-      selectedEnvironmentServerConfig === null
-    ) {
-      return;
-    }
-
-    if (alertedUnavailableIncomingShareIdRef.current === shareId) {
-      alertedUnavailableIncomingShareIdRef.current = null;
-    }
-    startedShareImportKeyRef.current = importKey;
-    const draftBackup =
-      shareImportDraftBackupRef.current.get(importKey) ?? getComposerDraftSnapshot(draftKey);
-    shareImportDraftBackupRef.current.set(importKey, draftBackup);
-    const importToken = Symbol(importKey);
-    let didReserveShare = false;
-    let didConsumeShare = false;
-    let needsDraftRestore = false;
-    activeShareImportTokenRef.current = importToken;
-    setImportingShareKey(importKey);
-    void (async () => {
-      await reserveShare(shareId, {
-        environmentId: String(destinationProject.environmentId),
-        projectId: String(destinationProject.id),
-      });
-      didReserveShare = true;
+  useEffect(
+    () => {
+      const shareId = props.incomingShareId;
+      const draftKey = flow.draftKey;
+      const destinationProject = selectedProject;
+      const initialEnvironmentId = props.initialProjectRef?.environmentId;
+      const initialProjectId = props.initialProjectRef?.projectId;
+      const selectedProjectMatchesRoute =
+        !initialEnvironmentId ||
+        !initialProjectId ||
+        (destinationProject?.environmentId === initialEnvironmentId &&
+          destinationProject.id === initialProjectId);
       if (
-        !shareImportMountedRef.current ||
-        activeShareImportTokenRef.current !== importToken ||
-        !isCurrentShareImport(draftKey, shareId)
+        !shareId ||
+        !draftKey ||
+        !destinationProject ||
+        !selectedProjectMatchesRoute ||
+        cancelledIncomingShareId === shareId
       ) {
         return;
       }
-      const selectedAttachments = selectIncomingShareAttachmentsForServer({
-        attachments: incomingShare.attachments,
-        serverConfig: appAtomRegistry.get(
-          serverEnvironment.configValueAtom(destinationProject.environmentId),
-        ),
-      });
-      if (selectedAttachments.status === "pending") {
-        throw new Error("Server attachment support is still loading.");
-      }
-      needsDraftRestore = true;
-      const { skippedAttachmentCount } = await mergeComposerDraftContent(draftKey, {
-        text: incomingShare.text,
-        attachments: selectedAttachments.attachments,
-        sourceShareId: shareId,
-      });
+      const importKey = `${shareId}:${draftKey}`;
       if (
-        !shareImportMountedRef.current ||
-        activeShareImportTokenRef.current !== importToken ||
-        !isCurrentShareImport(draftKey, shareId)
+        startedShareImportKeyRef.current === importKey ||
+        cancellingShareImportKeyRef.current === importKey
       ) {
-        // Durable reservations resume interrupted transfers only in this project, avoiding duplicate draft copies.
         return;
       }
-      await consumeShare(shareId);
-      didConsumeShare = true;
-      setConsumedIncomingShareId(shareId);
-      // Release skipped files after consumption even on unmount; sweeping re-checks new owners.
-      const retainedAttachmentIds = new Set(
-        getComposerDraftSnapshot(draftKey).attachments.map((attachment) => attachment.id),
-      );
-      scheduleUnusedComposerAttachmentCleanup(
-        incomingShare.attachments.filter((attachment) => !retainedAttachmentIds.has(attachment.id)),
-      );
-      if (!shareImportMountedRef.current || activeShareImportTokenRef.current !== importToken) {
+
+      if (!incomingShare) {
+        if (
+          isIncomingShareUnavailable &&
+          alertedUnavailableIncomingShareIdRef.current !== shareId
+        ) {
+          alertedUnavailableIncomingShareIdRef.current = shareId;
+          Dialog.alert(
+            "Shared content unavailable",
+            "The shared content is no longer in the inbox. You can continue editing this task draft.",
+          );
+        }
         return;
       }
-      const warnings = [...incomingShare.warnings, ...selectedAttachments.warnings];
-      if (skippedAttachmentCount > 0) {
-        warnings.push(
-          `${skippedAttachmentCount} shared file${skippedAttachmentCount === 1 ? " was" : "s were"} skipped because this draft reached the attachment limit.`,
+
+      if (
+        incomingShare.attachments.some((attachment) => attachment.type === "file") &&
+        selectedEnvironmentServerConfig === null
+      ) {
+        return;
+      }
+
+      if (alertedUnavailableIncomingShareIdRef.current === shareId) {
+        alertedUnavailableIncomingShareIdRef.current = null;
+      }
+      startedShareImportKeyRef.current = importKey;
+      const draftBackup =
+        shareImportDraftBackupRef.current.get(importKey) ?? getComposerDraftSnapshot(draftKey);
+      shareImportDraftBackupRef.current.set(importKey, draftBackup);
+      const importToken = Symbol(importKey);
+      let didReserveShare = false;
+      let didConsumeShare = false;
+      let needsDraftRestore = false;
+      activeShareImportTokenRef.current = importToken;
+      setImportingShareKey(importKey);
+      void (async () => {
+        await reserveShare(shareId, {
+          environmentId: String(destinationProject.environmentId),
+          projectId: String(destinationProject.id),
+        });
+        didReserveShare = true;
+        if (
+          !shareImportMountedRef.current ||
+          activeShareImportTokenRef.current !== importToken ||
+          !isCurrentShareImport(draftKey, shareId)
+        ) {
+          return;
+        }
+        const selectedAttachments = selectIncomingShareAttachmentsForServer({
+          attachments: incomingShare.attachments,
+          serverConfig: appAtomRegistry.get(
+            serverEnvironment.configValueAtom(destinationProject.environmentId),
+          ),
+        });
+        if (selectedAttachments.status === "pending") {
+          throw new Error("Server attachment support is still loading.");
+        }
+        needsDraftRestore = true;
+        const { skippedAttachmentCount } = await mergeComposerDraftContent(draftKey, {
+          text: incomingShare.text,
+          attachments: selectedAttachments.attachments,
+          sourceShareId: shareId,
+        });
+        if (
+          !shareImportMountedRef.current ||
+          activeShareImportTokenRef.current !== importToken ||
+          !isCurrentShareImport(draftKey, shareId)
+        ) {
+          // Durable reservations resume interrupted transfers only in this project, avoiding duplicate draft copies.
+          return;
+        }
+        await consumeShare(shareId);
+        didConsumeShare = true;
+        setConsumedIncomingShareId(shareId);
+        // Release skipped files after consumption even on unmount; sweeping re-checks new owners.
+        const retainedAttachmentIds = new Set(
+          getComposerDraftSnapshot(draftKey).attachments.map((attachment) => attachment.id),
         );
-      }
-      if (warnings.length > 0) {
-        Dialog.alert("Some shared content was skipped", warnings.join("\n"));
-      }
-      shareImportDraftBackupRef.current.delete(importKey);
-    })()
-      .catch((error) => {
+        scheduleUnusedComposerAttachmentCleanup(
+          incomingShare.attachments.filter(
+            (attachment) => !retainedAttachmentIds.has(attachment.id),
+          ),
+        );
         if (!shareImportMountedRef.current || activeShareImportTokenRef.current !== importToken) {
           return;
         }
-        Dialog.alert(
-          "Could not import shared content",
-          error instanceof Error ? error.message : "The shared content could not be saved.",
-          [
-            {
-              text: "Cancel import",
-              style: "cancel",
-              onPress: () => {
-                const cancelImport = async (): Promise<void> => {
-                  if (!shareImportMountedRef.current) {
-                    return;
-                  }
-                  // Latch before restoring: atom publication can re-run import before React commits cancellation.
-                  cancellingShareImportKeyRef.current = importKey;
-                  setIsCancellingShareImport(true);
-                  try {
-                    if (needsDraftRestore) {
-                      // Sweep restored attachments only after inbox consumption; unconsumed inbox entries still own them.
-                      const mergedAttachments = getComposerDraftSnapshot(draftKey).attachments;
-                      await restoreComposerDraftSnapshot(draftKey, draftBackup);
-                      needsDraftRestore = false;
-                      if (didConsumeShare) {
-                        scheduleUnusedComposerAttachmentCleanup(mergedAttachments);
-                      }
-                    }
-                    if (didReserveShare) {
-                      await releaseShareReservation(shareId, {
-                        environmentId: String(destinationProject.environmentId),
-                        projectId: String(destinationProject.id),
-                      });
-                    }
-                    shareImportDraftBackupRef.current.delete(importKey);
-                    if (shareImportMountedRef.current) {
-                      setIsCancellingShareImport(false);
-                      setCancelledIncomingShareId(shareId);
-                    }
-                  } catch (cancelError) {
+        const warnings = [...incomingShare.warnings, ...selectedAttachments.warnings];
+        if (skippedAttachmentCount > 0) {
+          warnings.push(
+            `${skippedAttachmentCount} shared file${skippedAttachmentCount === 1 ? " was" : "s were"} skipped because this draft reached the attachment limit.`,
+          );
+        }
+        if (warnings.length > 0) {
+          Dialog.alert("Some shared content was skipped", warnings.join("\n"));
+        }
+        shareImportDraftBackupRef.current.delete(importKey);
+      })()
+        .catch((error) => {
+          if (!shareImportMountedRef.current || activeShareImportTokenRef.current !== importToken) {
+            return;
+          }
+          Dialog.alert(
+            "Could not import shared content",
+            error instanceof Error ? error.message : "The shared content could not be saved.",
+            [
+              {
+                text: "Cancel import",
+                style: "cancel",
+                onPress: () => {
+                  const cancelImport = async (): Promise<void> => {
                     if (!shareImportMountedRef.current) {
                       return;
                     }
-                    Dialog.alert(
-                      "Could not cancel import",
-                      cancelError instanceof Error
-                        ? cancelError.message
-                        : "The shared content could not be restored safely.",
-                      [
-                        {
-                          text: "Retry import",
-                          onPress: () => {
-                            cancellingShareImportKeyRef.current = null;
-                            setIsCancellingShareImport(false);
-                            setShareImportAttempt((attempt) => attempt + 1);
+                    // Latch before restoring: atom publication can re-run import before React commits cancellation.
+                    cancellingShareImportKeyRef.current = importKey;
+                    setIsCancellingShareImport(true);
+                    try {
+                      if (needsDraftRestore) {
+                        // Sweep restored attachments only after inbox consumption; unconsumed inbox entries still own them.
+                        const mergedAttachments = getComposerDraftSnapshot(draftKey).attachments;
+                        await restoreComposerDraftSnapshot(draftKey, draftBackup);
+                        needsDraftRestore = false;
+                        if (didConsumeShare) {
+                          scheduleUnusedComposerAttachmentCleanup(mergedAttachments);
+                        }
+                      }
+                      if (didReserveShare) {
+                        await releaseShareReservation(shareId, {
+                          environmentId: String(destinationProject.environmentId),
+                          projectId: String(destinationProject.id),
+                        });
+                      }
+                      shareImportDraftBackupRef.current.delete(importKey);
+                      if (shareImportMountedRef.current) {
+                        setIsCancellingShareImport(false);
+                        setCancelledIncomingShareId(shareId);
+                      }
+                    } catch (cancelError) {
+                      if (!shareImportMountedRef.current) {
+                        return;
+                      }
+                      Dialog.alert(
+                        "Could not cancel import",
+                        cancelError instanceof Error
+                          ? cancelError.message
+                          : "The shared content could not be restored safely.",
+                        [
+                          {
+                            text: "Retry import",
+                            onPress: () => {
+                              cancellingShareImportKeyRef.current = null;
+                              setIsCancellingShareImport(false);
+                              setShareImportAttempt((attempt) => attempt + 1);
+                            },
                           },
-                        },
-                        {
-                          text: "Retry cancel",
-                          onPress: () => void cancelImport(),
-                        },
-                      ],
-                      { cancelable: false },
-                    );
-                  }
-                };
-                void cancelImport();
+                          {
+                            text: "Retry cancel",
+                            onPress: () => void cancelImport(),
+                          },
+                        ],
+                        { cancelable: false },
+                      );
+                    }
+                  };
+                  void cancelImport();
+                },
               },
-            },
-            {
-              text: "Retry",
-              onPress: () => setShareImportAttempt((attempt) => attempt + 1),
-            },
-          ],
-          { cancelable: false },
-        );
-      })
-      .finally(() => {
-        if (startedShareImportKeyRef.current === importKey) {
-          startedShareImportKeyRef.current = null;
-        }
-        if (shareImportMountedRef.current && activeShareImportTokenRef.current === importToken) {
-          activeShareImportTokenRef.current = null;
-          setImportingShareKey(null);
-        }
-      });
-  }, [
-    consumeShare,
-    cancelledIncomingShareId,
-    flow.draftKey,
-    hasImportedIncomingShare,
-    incomingShare,
-    isIncomingShareInboxLoading,
-    isIncomingShareUnavailable,
-    props.incomingShareId,
-    props.initialProjectRef?.environmentId,
-    props.initialProjectRef?.projectId,
-    releaseShareReservation,
-    reserveShare,
-    selectedEnvironmentServerConfig,
-    selectedProject,
-    shareImportAttempt,
-  ]);
+              {
+                text: "Retry",
+                onPress: () => setShareImportAttempt((attempt) => attempt + 1),
+              },
+            ],
+            { cancelable: false },
+          );
+        })
+        .finally(() => {
+          if (startedShareImportKeyRef.current === importKey) {
+            startedShareImportKeyRef.current = null;
+          }
+          if (shareImportMountedRef.current && activeShareImportTokenRef.current === importToken) {
+            activeShareImportTokenRef.current = null;
+            setImportingShareKey(null);
+          }
+        });
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Share import readiness and retry attempts restart the import lifecycle. */ [
+      consumeShare,
+      cancelledIncomingShareId,
+      flow.draftKey,
+      hasImportedIncomingShare,
+      incomingShare,
+      isIncomingShareInboxLoading,
+      isIncomingShareUnavailable,
+      props.incomingShareId,
+      props.initialProjectRef?.environmentId,
+      props.initialProjectRef?.projectId,
+      releaseShareReservation,
+      reserveShare,
+      selectedEnvironmentServerConfig,
+      selectedProject,
+      shareImportAttempt,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   const selectedEnvironmentLabel =
     flow.environments.find(

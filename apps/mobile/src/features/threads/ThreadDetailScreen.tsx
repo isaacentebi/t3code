@@ -474,9 +474,15 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
       subscription.remove();
     };
   }, []);
-  useEffect(() => {
-    setKeyboardStateSuspect(false);
-  }, [isKeyboardVisible, liveKeyboardHeight]);
+  useEffect(
+    () => {
+      setKeyboardStateSuspect(false);
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Native keyboard measurements clear a stale keyboard-state suspicion. */ [
+      isKeyboardVisible,
+      liveKeyboardHeight,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   const handleOwnedInputFocusChange = (focused: boolean) => {
     ownedInputFocusedRef.current = focused;
     if (focused) {
@@ -1072,10 +1078,17 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
       scheduleOverlayRepin(60);
     }
   };
-  useEffect(() => {
-    userInputCardProgress.set(1);
-    userInputInsetProgress.set(1);
-  }, [activeUserInputRequestId, userInputCardProgress, userInputInsetProgress]);
+  useEffect(
+    () => {
+      userInputCardProgress.set(1);
+      userInputInsetProgress.set(1);
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- A new input request resets the previous card’s collapsed animation. */ [
+      activeUserInputRequestId,
+      userInputCardProgress,
+      userInputInsetProgress,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   const showContent = props.showContent ?? true;
   // Showing the thread counts as viewing it, before its live shell arrives too.
   useAtomMount(
@@ -1134,14 +1147,20 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
     selectedThreadKeyRef.current = selectedThreadKey;
   }, [selectedThreadKey]);
 
-  useEffect(() => {
-    setAnchorMessageId(null);
-    setSubmittedMessageId(null);
-    lastScrolledSubmittedMessageIdRef.current = null;
-    endFollowEnabledRef.current = true;
-    setEndFollowEnabled(true);
-    freeze.set(false);
-  }, [freeze, selectedThreadKey]);
+  useEffect(
+    () => {
+      setAnchorMessageId(null);
+      setSubmittedMessageId(null);
+      lastScrolledSubmittedMessageIdRef.current = null;
+      endFollowEnabledRef.current = true;
+      setEndFollowEnabled(true);
+      freeze.set(false);
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Changing threads resets scroll anchors and end-follow state. */ [
+      freeze,
+      selectedThreadKey,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   useEffect(() => {
     if (

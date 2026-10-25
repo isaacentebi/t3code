@@ -200,70 +200,80 @@ function useNativeReviewDiffPayload(
   onFailure?: () => void,
   onDelivered?: (payload: string) => void,
 ) {
-  useEffect(() => {
-    if (payload === undefined) {
-      return;
-    }
-
-    let cancelled = false;
-    let frame: number | null = null;
-    let attempts = 0;
-
-    const dispatch = () => {
-      if (cancelled) {
+  useEffect(
+    () => {
+      if (payload === undefined) {
         return;
       }
 
-      const view = nativeRef.current;
-      const command: ((payload: string) => Promise<void | boolean>) | undefined = view?.[method];
-      if (!view || !command) {
-        if (attempts < NATIVE_REVIEW_DIFF_PAYLOAD_RETRY_FRAMES) {
-          attempts += 1;
-          frame = requestAnimationFrame(dispatch);
-        } else {
-          console.error(`[native-review-diff] ${method} unavailable`);
-          onFailure?.();
+      let cancelled = false;
+      let frame: number | null = null;
+      let attempts = 0;
+
+      const dispatch = () => {
+        if (cancelled) {
+          return;
         }
-        return;
-      }
 
-      void Promise.resolve()
-        .then(() => {
-          if (!cancelled) return command.call(view, payload);
-        })
-        .then((accepted) => {
-          if (cancelled) return;
-          // This promise resolves after native decode, reset validation, and merge.
-          if (method === "setTokensPatchJson" && accepted !== true) {
-            throw new Error("Native token patch was not accepted");
-          }
-          onDelivered?.(payload);
-        })
-        .catch((error: unknown) => {
-          if (cancelled) return;
-          if (
-            attempts < NATIVE_REVIEW_DIFF_PAYLOAD_RETRY_FRAMES &&
-            isPendingNativeViewRegistration(error)
-          ) {
+        const view = nativeRef.current;
+        const command: ((payload: string) => Promise<void | boolean>) | undefined = view?.[method];
+        if (!view || !command) {
+          if (attempts < NATIVE_REVIEW_DIFF_PAYLOAD_RETRY_FRAMES) {
             attempts += 1;
             frame = requestAnimationFrame(dispatch);
-            return;
+          } else {
+            console.error(`[native-review-diff] ${method} unavailable`);
+            onFailure?.();
           }
-          console.error(`[native-review-diff] ${method} failed`, error);
-          onFailure?.();
-        });
-    };
+          return;
+        }
 
-    // Expo registers native tags after Fabric attaches refs; dispatch next frame.
-    frame = requestAnimationFrame(dispatch);
+        void Promise.resolve()
+          .then(() => {
+            if (!cancelled) return command.call(view, payload);
+          })
+          .then((accepted) => {
+            if (cancelled) return;
+            // This promise resolves after native decode, reset validation, and merge.
+            if (method === "setTokensPatchJson" && accepted !== true) {
+              throw new Error("Native token patch was not accepted");
+            }
+            onDelivered?.(payload);
+          })
+          .catch((error: unknown) => {
+            if (cancelled) return;
+            if (
+              attempts < NATIVE_REVIEW_DIFF_PAYLOAD_RETRY_FRAMES &&
+              isPendingNativeViewRegistration(error)
+            ) {
+              attempts += 1;
+              frame = requestAnimationFrame(dispatch);
+              return;
+            }
+            console.error(`[native-review-diff] ${method} failed`, error);
+            onFailure?.();
+          });
+      };
 
-    return () => {
-      cancelled = true;
-      if (frame !== null) {
-        cancelAnimationFrame(frame);
-      }
-    };
-  }, [method, nativeRef, payload, resetKey, onFailure, onDelivered]);
+      // Expo registers native tags after Fabric attaches refs; dispatch next frame.
+      frame = requestAnimationFrame(dispatch);
+
+      return () => {
+        cancelled = true;
+        if (frame !== null) {
+          cancelAnimationFrame(frame);
+        }
+      };
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- A remounted native view needs its payload delivered again even when the payload is unchanged. */ [
+      method,
+      nativeRef,
+      payload,
+      resetKey,
+      onFailure,
+      onDelivered,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 }
 
 function getExpoViewConfig(moduleName: string) {

@@ -474,18 +474,24 @@ export function HomeScreen(props: HomeScreenProps) {
     selectedThreadKey,
   });
   const nextSnoozeWakeAt = threadListV2Layout.nextSnoozeWakeAt;
-  useEffect(() => {
-    if (nextSnoozeWakeAt === null) return;
-    const wakeAtMs = Date.parse(nextSnoozeWakeAt);
-    if (Number.isNaN(wakeAtMs)) return;
-    const delayMs = Math.min(Math.max(0, wakeAtMs - Date.now()) + 50, 2_147_483_647);
-    const id = setTimeout(() => {
-      setNow(new Date().toISOString());
-      bumpSnoozeWakeTick((tick) => tick + 1);
-    }, delayMs);
-    return () => clearTimeout(id);
-    // snoozeWakeTick re-arms clamped timers even when the wake date exceeds 32-bit setTimeout and stays unchanged.
-  }, [nextSnoozeWakeAt, snoozeWakeTick]);
+  useEffect(
+    () => {
+      if (nextSnoozeWakeAt === null) return;
+      const wakeAtMs = Date.parse(nextSnoozeWakeAt);
+      if (Number.isNaN(wakeAtMs)) return;
+      const delayMs = Math.min(Math.max(0, wakeAtMs - Date.now()) + 50, 2_147_483_647);
+      const id = setTimeout(() => {
+        setNow(new Date().toISOString());
+        bumpSnoozeWakeTick((tick) => tick + 1);
+      }, delayMs);
+      return () => clearTimeout(id);
+      // snoozeWakeTick re-arms clamped timers even when the wake date exceeds 32-bit setTimeout and stays unchanged.
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- The tick re-arms timers whose distant deadline was clamped to the platform timer limit. */ [
+      nextSnoozeWakeAt,
+      snoozeWakeTick,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   // Called as `props.onSelectThread(...)`, the compiler would cache this handler on the whole
   // props object, which is new on every render of Home's parent.
   const { onSelectThread } = props;

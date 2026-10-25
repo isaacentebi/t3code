@@ -290,61 +290,64 @@ export function useComposerCommandMenu({
     }
     hadWorkspaceSnapshotRef.current = hasWorkspaceSnapshot;
   }, [hasWorkspaceSnapshot]);
-  useEffect(() => {
-    if (!environmentId || !projectCwd || !selectedProviderInstanceId) return;
-    const key = `${environmentId}:${selectedProviderInstanceId}:${projectCwd}`;
-    const now = Date.now();
-    const lastRequest = workspaceRefreshKeyRef.current;
-    if (
-      lastRequest?.key === key &&
-      now - lastRequest.requestedAt < PROVIDER_WORKSPACE_SNAPSHOT_TTL_MS
-    )
-      return;
-    if (hasCurrentProviderWorkspaceSnapshot(selectedProviderStatus, projectCwd, now)) {
-      setWorkspaceRefreshRetry(null);
-      return;
-    }
-    const retry = workspaceRefreshRetry;
-    if (retry?.key === key && now < retry.notBefore) return;
-    const request = { key, requestedAt: now };
-    workspaceRefreshKeyRef.current = request;
-    const retryLater = () => {
-      if (workspaceRefreshKeyRef.current !== request) return;
-      const failed = failedRefreshesRef.current;
-      const count = failed?.key === key ? failed.count + 1 : 1;
-      failedRefreshesRef.current = { key, count };
-      // Keeping the request marker lets the TTL hold off the next scan.
-      if (count >= WORKSPACE_SNAPSHOT_MAX_ATTEMPTS) return;
-      workspaceRefreshKeyRef.current = null;
-      setWorkspaceRefreshRetry({
-        key,
-        notBefore: Date.now() + WORKSPACE_SNAPSHOT_RETRY_COOLDOWN_MS,
-      });
-    };
-    void refreshProviders({
+  useEffect(
+    () => {
+      if (!environmentId || !projectCwd || !selectedProviderInstanceId) return;
+      const key = `${environmentId}:${selectedProviderInstanceId}:${projectCwd}`;
+      const now = Date.now();
+      const lastRequest = workspaceRefreshKeyRef.current;
+      if (
+        lastRequest?.key === key &&
+        now - lastRequest.requestedAt < PROVIDER_WORKSPACE_SNAPSHOT_TTL_MS
+      )
+        return;
+      if (hasCurrentProviderWorkspaceSnapshot(selectedProviderStatus, projectCwd, now)) {
+        setWorkspaceRefreshRetry(null);
+        return;
+      }
+      const retry = workspaceRefreshRetry;
+      if (retry?.key === key && now < retry.notBefore) return;
+      const request = { key, requestedAt: now };
+      workspaceRefreshKeyRef.current = request;
+      const retryLater = () => {
+        if (workspaceRefreshKeyRef.current !== request) return;
+        const failed = failedRefreshesRef.current;
+        const count = failed?.key === key ? failed.count + 1 : 1;
+        failedRefreshesRef.current = { key, count };
+        // Keeping the request marker lets the TTL hold off the next scan.
+        if (count >= WORKSPACE_SNAPSHOT_MAX_ATTEMPTS) return;
+        workspaceRefreshKeyRef.current = null;
+        setWorkspaceRefreshRetry({
+          key,
+          notBefore: Date.now() + WORKSPACE_SNAPSHOT_RETRY_COOLDOWN_MS,
+        });
+      };
+      void refreshProviders({
+        environmentId,
+        input: { instanceId: selectedProviderInstanceId, cwd: projectCwd },
+      }).then((result) => {
+        const refreshed =
+          result._tag === "Success" &&
+          hasCompleteProviderWorkspaceSnapshot(
+            result.value.providers.find(
+              (provider) => provider.instanceId === selectedProviderInstanceId,
+            ),
+            projectCwd,
+          );
+        if (!refreshed) retryLater();
+        else failedRefreshesRef.current = null;
+      }, retryLater);
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Draft edits can reveal commands that require a fresh provider workspace snapshot. */ [
+      draftMessage,
       environmentId,
-      input: { instanceId: selectedProviderInstanceId, cwd: projectCwd },
-    }).then((result) => {
-      const refreshed =
-        result._tag === "Success" &&
-        hasCompleteProviderWorkspaceSnapshot(
-          result.value.providers.find(
-            (provider) => provider.instanceId === selectedProviderInstanceId,
-          ),
-          projectCwd,
-        );
-      if (!refreshed) retryLater();
-      else failedRefreshesRef.current = null;
-    }, retryLater);
-  }, [
-    draftMessage,
-    environmentId,
-    projectCwd,
-    refreshProviders,
-    selectedProviderInstanceId,
-    selectedProviderStatus,
-    workspaceRefreshRetry,
-  ]);
+      projectCwd,
+      refreshProviders,
+      selectedProviderInstanceId,
+      selectedProviderStatus,
+      workspaceRefreshRetry,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   const trigger = (() => {
     if (!enabled || selection.start !== selection.end) {

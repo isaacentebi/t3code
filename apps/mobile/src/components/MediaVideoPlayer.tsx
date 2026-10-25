@@ -89,20 +89,27 @@ function LoadedMediaVideo(props: {
     return () => subscription.remove();
   }, [focused, playback, paused]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoadState("pending");
-    // A renewed signature is used on Retry, not as a reason to reset the native player.
-    void loadSource(controller.signal).then(
-      () => {
-        if (!controller.signal.aborted) setLoadState("complete");
-      },
-      () => {
-        if (!controller.signal.aborted) setLoadState("error");
-      },
-    );
-    return () => controller.abort();
-  }, [player, props.playRequested, attempt]);
+  useEffect(
+    () => {
+      const controller = new AbortController();
+      setLoadState("pending");
+      // A renewed signature is used on Retry, not as a reason to reset the native player.
+      void loadSource(controller.signal).then(
+        () => {
+          if (!controller.signal.aborted) setLoadState("complete");
+        },
+        () => {
+          if (!controller.signal.aborted) setLoadState("error");
+        },
+      );
+      return () => controller.abort();
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Playback intent and retry attempts explicitly restart native media loading. */ [
+      player,
+      props.playRequested,
+      attempt,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   return (
     <View collapsable={false} style={{ flex: 1 }}>

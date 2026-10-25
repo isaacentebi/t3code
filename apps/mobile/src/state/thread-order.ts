@@ -23,9 +23,15 @@ export const pendingThreadOrderAtom = Atom.make<PendingThreadOrder | null>(null)
 export function usePendingThreadOrder(nowMinute: string, snoozeWakeTick: number) {
   const pending = useAtomValue(pendingThreadOrderAtom);
   // Clock-driven wakes can change membership without shell events; retire order holds and re-enable moves then.
-  useEffect(() => {
-    getPendingThreadOrder();
-  }, [nowMinute, snoozeWakeTick]);
+  useEffect(
+    () => {
+      getPendingThreadOrder();
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Clock ticks re-evaluate the external pending-order snapshot even without a shell event. */ [
+      nowMinute,
+      snoozeWakeTick,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   return pending;
 }
 

@@ -102,10 +102,15 @@ export function useReviewCommentSelectionController(input: {
     selectedSection?.title,
   ]);
 
-  useEffect(() => {
-    clearReviewCommentTarget();
-    setPendingNativeCommentSelection(null);
-  }, [selectedSection?.id]);
+  useEffect(
+    () => {
+      clearReviewCommentTarget();
+      setPendingNativeCommentSelection(null);
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Changing sections clears the previous section’s selection. */ [
+      selectedSection?.id,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   useEffect(() => {
     if (activeCommentTarget === null) {

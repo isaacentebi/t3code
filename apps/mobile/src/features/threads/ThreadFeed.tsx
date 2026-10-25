@@ -2215,10 +2215,17 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     props.threadId,
     fileShareSourceIdentifier,
   );
-  useEffect(() => {
-    setExpandedVideo(null);
-    setExpandedFile(null);
-  }, [props.environmentId, props.threadId, props.contentPresentation.kind]);
+  useEffect(
+    () => {
+      setExpandedVideo(null);
+      setExpandedFile(null);
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Changing the thread or presentation closes media owned by the previous view. */ [
+      props.environmentId,
+      props.threadId,
+      props.contentPresentation.kind,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   const horizontalPadding = props.layoutVariant === "split" ? 20 : 16;
   const contentLeftInset = props.contentSideInsets?.left ?? 0;
   const contentRightInset = props.contentSideInsets?.right ?? 0;
@@ -2718,9 +2725,15 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     if (props.submittedMessageId !== null) resetEndFollow(props.submittedMessageId);
   }, [props.submittedMessageId]);
 
-  useEffect(() => {
-    reportHeaderMaterialVisibility(false);
-  }, [feedThreadKey, reportHeaderMaterialVisibility]);
+  useEffect(
+    () => {
+      reportHeaderMaterialVisibility(false);
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- A new thread must clear the previous feed’s header material. */ [
+      feedThreadKey,
+      reportHeaderMaterialVisibility,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   const presentedFeed = appendGuestPendingMessages(
     useThreadFeedPresentation(props, expandedTurnIds, expandedWorkGroups),
@@ -2731,12 +2744,19 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   );
   // Empty/filled remounts reset imperative insets; seed the overlay first. Android uses a declarative inset floor.
   const listMountKey = `${feedThreadKey}:${presentedFeed.some((entry) => entry.type !== "thinking") ? "filled" : "empty"}`;
-  useLayoutEffect(() => {
-    const bottom = props.contentInsetEndAdjustment.value;
-    if (bottom > 0) {
-      listRef.current?.reportContentInset({ bottom });
-    }
-  }, [listMountKey, props.contentInsetEndAdjustment, listRef]);
+  useLayoutEffect(
+    () => {
+      const bottom = props.contentInsetEndAdjustment.value;
+      if (bottom > 0) {
+        listRef.current?.reportContentInset({ bottom });
+      }
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- A remounted native list needs its initial inset applied again. */ [
+      listMountKey,
+      props.contentInsetEndAdjustment,
+      listRef,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   // Opening at a message: its run unfolds, the list stops following the end
   // (a render later, so the end does not pull it back), then it scrolls there.
   const [loadedListKey, setLoadedListKey] = useState<string | null>(null);
@@ -2926,11 +2946,19 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   };
 
   // Start settling after React commits and restart on each size change, so end maintenance waits for LegendList correction.
-  useLayoutEffect(() => {
-    if (disclosureAnchorKeyRef.current !== null) {
-      settleDisclosureAfterLayout();
-    }
-  }, [expandedTurnIds, expandedWorkGroups, expandedWorkRows, settleDisclosureAfterLayout]);
+  useLayoutEffect(
+    () => {
+      if (disclosureAnchorKeyRef.current !== null) {
+        settleDisclosureAfterLayout();
+      }
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Disclosure changes restart layout settling after React commits. */ [
+      expandedTurnIds,
+      expandedWorkGroups,
+      expandedWorkRows,
+      settleDisclosureAfterLayout,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   const handleItemSizeChanged = () => {
     if (disclosureAnchorKeyRef.current !== null) {

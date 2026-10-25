@@ -246,15 +246,21 @@ function JavaScriptSourceFileSurface(props: SourceFileSurfaceProps) {
     <RefreshControl refreshing={isPullRefreshing} onRefresh={() => void handlePullToRefresh()} />
   ) : undefined;
 
-  useEffect(() => {
-    if (targetIndex === null) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      listRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0.3 });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [props.path, targetIndex]);
+  useEffect(
+    () => {
+      if (targetIndex === null) {
+        return;
+      }
+      const frame = requestAnimationFrame(() => {
+        listRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0.3 });
+      });
+      return () => cancelAnimationFrame(frame);
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- A new file must reapply its target line even when the line index is unchanged. */ [
+      props.path,
+      targetIndex,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   const renderLine = ({ item, index }: { item: string; index: number }) => (
     <HighlightedSourceLine

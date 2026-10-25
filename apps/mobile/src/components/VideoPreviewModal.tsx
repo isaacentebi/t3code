@@ -63,31 +63,37 @@ function useLocalPlayback(source: LocalVideoPreviewSource): PlaybackState {
     loadLocalAttachmentPreview(attachment, signal),
   );
   const { id: attachmentId, fileUri } = attachment;
-  useEffect(() => {
-    setUri(null);
-    setError(null);
-    const controller = new AbortController();
-    const loading = loadAttachment(controller.signal);
-    void loading.then(
-      (file) => {
-        if (file === null) return;
-        if (controller.signal.aborted) file.dispose();
-        else setUri(file.uri);
-      },
-      (cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(cause instanceof Error ? cause.message : "Could not load this video.");
-        }
-      },
-    );
-    return () => {
-      controller.abort();
+  useEffect(
+    () => {
+      setUri(null);
+      setError(null);
+      const controller = new AbortController();
+      const loading = loadAttachment(controller.signal);
       void loading.then(
-        (file) => file?.dispose(),
-        () => undefined,
+        (file) => {
+          if (file === null) return;
+          if (controller.signal.aborted) file.dispose();
+          else setUri(file.uri);
+        },
+        (cause: unknown) => {
+          if (!controller.signal.aborted) {
+            setError(cause instanceof Error ? cause.message : "Could not load this video.");
+          }
+        },
       );
-    };
-  }, [attachmentId, fileUri]);
+      return () => {
+        controller.abort();
+        void loading.then(
+          (file) => file?.dispose(),
+          () => undefined,
+        );
+      };
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- A different attachment or cached file restarts the native video resource lifecycle. */ [
+      attachmentId,
+      fileUri,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   const mimeType = videoMimeType(attachment) ?? attachment.mimeType;
   return {
     uri,
@@ -208,9 +214,10 @@ export function VideoPreviewModal(props: {
 }) {
   const isFocused = useIsFocused();
   const hasSource = props.source !== null;
+  const { onRequestClose } = props;
   useEffect(() => {
-    if (!isFocused && hasSource) props.onRequestClose();
-  }, [isFocused, hasSource, props.onRequestClose]);
+    if (!isFocused && hasSource) onRequestClose();
+  }, [isFocused, hasSource, onRequestClose]);
   const { source } = props;
   if (source === null || !isFocused) return null;
   return source.type === "local" ? (

@@ -243,13 +243,14 @@ export function NewTaskBranchPickerRouteScreen() {
   const allowSelectionNavigationRef = useRef(false);
   const mountedRef = useRef(true);
 
+  const { setBranchQuery } = flow;
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      flow.setBranchQuery("");
+      setBranchQuery("");
     };
-  }, [flow.setBranchQuery]);
+  }, [setBranchQuery]);
 
   useEffect(
     () =>

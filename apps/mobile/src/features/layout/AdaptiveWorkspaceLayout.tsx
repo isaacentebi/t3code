@@ -144,11 +144,16 @@ export function useRegisterWorkspaceInspector(render: (() => ReactNode) | undefi
     };
   });
 
-  useEffect(() => {
-    if (focusedRef.current) {
-      syncRegistration();
-    }
-  }, [wrappedRender]);
+  useEffect(
+    () => {
+      if (focusedRef.current) {
+        syncRegistration();
+      }
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Changed pane content must replace its existing native workspace registration. */ [
+      wrappedRender,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   useEffect(
     () => () => {

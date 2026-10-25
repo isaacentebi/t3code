@@ -535,7 +535,7 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
       length: terminal.buffer.length,
       preview: terminal.buffer.slice(0, 160),
     });
-  }, [terminal.buffer, terminal.buffer.length, terminalKey]);
+  }, [terminal.buffer, terminalKey]);
   const cwd = terminal.summary?.cwd ?? selectedThreadProject?.workspaceRoot ?? null;
   const serverConfigs = useServerConfigs();
   const hostOs =
@@ -703,10 +703,15 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
     canOperateTerminal,
   ]);
 
-  useEffect(() => {
-    firstNonEmptyBufferLoggedRef.current = false;
-    sentInitialInputKeyRef.current = null;
-  }, [terminalKey]);
+  useEffect(
+    () => {
+      firstNonEmptyBufferLoggedRef.current = false;
+      sentInitialInputKeyRef.current = null;
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- A new terminal session resets the previous session’s imperative state. */ [
+      terminalKey,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   const clearBufferReplayTimer = useCallback(() => {
     if (bufferReplayTimerRef.current !== null) {
@@ -788,12 +793,21 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
 
   const [pasteSession] = useState(createTerminalPasteSession);
 
-  useEffect(() => {
-    pasteSession.reset(canOperateTerminal && isRunning);
-    return () => {
-      pasteSession.reset(false);
-    };
-  }, [canOperateTerminal, isRunning, pasteSession, terminal.lifecycleVersion, terminalKey]);
+  useEffect(
+    () => {
+      pasteSession.reset(canOperateTerminal && isRunning);
+      return () => {
+        pasteSession.reset(false);
+      };
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Terminal restarts invalidate pending paste operations even when running remains true. */ [
+      canOperateTerminal,
+      isRunning,
+      pasteSession,
+      terminal.lifecycleVersion,
+      terminalKey,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 
   const pasteFromClipboard = useCallback(async () => {
     await pasteSession.paste({

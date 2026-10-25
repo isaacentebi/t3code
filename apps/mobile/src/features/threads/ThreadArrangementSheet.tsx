@@ -4,7 +4,15 @@ import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import { sortInboxThreadsByReturn } from "@t3tools/client-runtime/state/thread-inbox";
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Animated, FlatList, Modal, Pressable, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Reanimated, { ReduceMotion, useAnimatedStyle, withTiming } from "react-native-reanimated";
@@ -281,18 +289,24 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
     latest.current = { rows, planners, moveThread };
   }, [rows, planners, moveThread]);
 
-  function stop() {
+  const stop = useCallback(() => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
     drag.current = null;
     setPreview(null);
-  }
+  }, []);
   const orderVersion = rows
     .map((row) => `${row.key}:${row.thread?.pinOrderKey}:${row.thread?.activeOrderKey}`)
     .join("|");
-  useEffect(() => {
-    stop();
-  }, [orderVersion]);
+  useEffect(
+    () => {
+      stop();
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Reordering invalidates the current drag even when its callbacks have not changed. */ [
+      orderVersion,
+      stop,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   useEffect(
     () => () => {
       if (frame.current !== null) cancelAnimationFrame(frame.current);

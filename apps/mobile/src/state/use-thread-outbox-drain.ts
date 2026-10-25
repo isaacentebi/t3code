@@ -1082,290 +1082,299 @@ export function useThreadOutboxDrain(): void {
     }
   }, [creationOutcomes, threads]);
 
-  useEffect(() => {
-    if (dispatchingQueuedMessageId !== null) {
-      return;
-    }
+  useEffect(
+    () => {
+      if (dispatchingQueuedMessageId !== null) {
+        return;
+      }
 
-    const queuedMessageIds = new Set(
-      Object.values(queuedMessagesByThreadKey)
-        .flat()
-        .map((message) => message.messageId),
-    );
-    for (const messageId of acknowledgedExistingThreadMessageIdsRef.current) {
-      if (!queuedMessageIds.has(messageId)) {
-        acknowledgedExistingThreadMessageIdsRef.current.delete(messageId);
+      const queuedMessageIds = new Set(
+        Object.values(queuedMessagesByThreadKey)
+          .flat()
+          .map((message) => message.messageId),
+      );
+      for (const messageId of acknowledgedExistingThreadMessageIdsRef.current) {
+        if (!queuedMessageIds.has(messageId)) {
+          acknowledgedExistingThreadMessageIdsRef.current.delete(messageId);
+        }
       }
-    }
-    for (const [messageId, release] of familyMountsRef.current) {
-      if (!queuedMessageIds.has(messageId)) {
-        release();
-        familyMountsRef.current.delete(messageId);
+      for (const [messageId, release] of familyMountsRef.current) {
+        if (!queuedMessageIds.has(messageId)) {
+          release();
+          familyMountsRef.current.delete(messageId);
+        }
       }
-    }
 
-    for (const [threadKey, queuedMessages] of Object.entries(queuedMessagesByThreadKey)) {
-      const nextQueuedMessage = queuedMessages[0];
-      if (!nextQueuedMessage) {
-        continue;
-      }
-      if (
-        nextQueuedMessage.creation === undefined &&
-        acknowledgedExistingThreadMessageIdsRef.current.has(nextQueuedMessage.messageId)
-      ) {
+      for (const [threadKey, queuedMessages] of Object.entries(queuedMessagesByThreadKey)) {
+        const nextQueuedMessage = queuedMessages[0];
+        if (!nextQueuedMessage) {
+          continue;
+        }
+        if (
+          nextQueuedMessage.creation === undefined &&
+          acknowledgedExistingThreadMessageIdsRef.current.has(nextQueuedMessage.messageId)
+        ) {
+          if ((retryNotBeforeRef.current.get(nextQueuedMessage.messageId) ?? 0) > Date.now()) {
+            continue;
+          }
+          beginDispatchingQueuedMessage(nextQueuedMessage.messageId);
+          void removeAcknowledgedExistingThreadMessage(
+            nextQueuedMessage,
+            acknowledgedExistingThreadMessageIdsRef.current,
+          )
+            .then((removed) => {
+              if (!removed) {
+                scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
+                return;
+              }
+              retryAttemptRef.current.delete(nextQueuedMessage.messageId);
+              retryNotBeforeRef.current.delete(nextQueuedMessage.messageId);
+              const pendingTimer = retryTimersRef.current.get(nextQueuedMessage.messageId);
+              if (pendingTimer !== undefined) {
+                clearTimeout(pendingTimer);
+                retryTimersRef.current.delete(nextQueuedMessage.messageId);
+              }
+            })
+            .finally(() => finishDispatchingQueuedMessage(nextQueuedMessage.messageId));
+          return;
+        }
+        if (editingQueuedMessageIds[nextQueuedMessage.messageId]) {
+          continue;
+        }
+        const blockedRecovery = blockedRecoverySubscriptionsRef.current.get(
+          nextQueuedMessage.messageId,
+        );
+        if (blockedRecovery) {
+          if (blockedRecovery.message === nextQueuedMessage) {
+            continue;
+          }
+          blockedRecoverySubscriptionsRef.current.delete(nextQueuedMessage.messageId);
+          blockedRecovery.unsubscribe();
+        }
         if ((retryNotBeforeRef.current.get(nextQueuedMessage.messageId) ?? 0) > Date.now()) {
           continue;
         }
-        beginDispatchingQueuedMessage(nextQueuedMessage.messageId);
-        void removeAcknowledgedExistingThreadMessage(
-          nextQueuedMessage,
-          acknowledgedExistingThreadMessageIdsRef.current,
-        )
-          .then((removed) => {
-            if (!removed) {
-              scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
-              return;
-            }
-            retryAttemptRef.current.delete(nextQueuedMessage.messageId);
-            retryNotBeforeRef.current.delete(nextQueuedMessage.messageId);
-            const pendingTimer = retryTimersRef.current.get(nextQueuedMessage.messageId);
-            if (pendingTimer !== undefined) {
-              clearTimeout(pendingTimer);
-              retryTimersRef.current.delete(nextQueuedMessage.messageId);
-            }
-          })
-          .finally(() => finishDispatchingQueuedMessage(nextQueuedMessage.messageId));
-        return;
-      }
-      if (editingQueuedMessageIds[nextQueuedMessage.messageId]) {
-        continue;
-      }
-      const blockedRecovery = blockedRecoverySubscriptionsRef.current.get(
-        nextQueuedMessage.messageId,
-      );
-      if (blockedRecovery) {
-        if (blockedRecovery.message === nextQueuedMessage) {
+
+        let thread = findThread(threads, nextQueuedMessage);
+        if (thread && scopedThreadKey(thread.environmentId, thread.id) !== threadKey) {
           continue;
         }
-        blockedRecoverySubscriptionsRef.current.delete(nextQueuedMessage.messageId);
-        blockedRecovery.unsubscribe();
-      }
-      if ((retryNotBeforeRef.current.get(nextQueuedMessage.messageId) ?? 0) > Date.now()) {
-        continue;
-      }
 
-      let thread = findThread(threads, nextQueuedMessage);
-      if (thread && scopedThreadKey(thread.environmentId, thread.id) !== threadKey) {
-        continue;
-      }
-
-      const creation = nextQueuedMessage.creation;
-      const environment = connectedEnvironments.find(
-        (candidate) => candidate.environmentId === nextQueuedMessage.environmentId,
-      );
-      const shellStatus = shellStatuses.get(nextQueuedMessage.environmentId) ?? "empty";
-      const serverConfig = serverConfigs.get(nextQueuedMessage.environmentId);
-      let familyRead: ThreadFamilyRead | undefined;
-      if (
-        thread === undefined &&
-        creation === undefined &&
-        serverConfig?.shellThreadFamilies === true
-      ) {
-        // The family keeps the row readable through dispatch once it loads; the current shell
-        // generation's read decides whether the thread is gone.
-        if (!familyMountsRef.current.has(nextQueuedMessage.messageId)) {
-          familyMountsRef.current.set(
-            nextQueuedMessage.messageId,
-            threadFamilies.mount(
+        const creation = nextQueuedMessage.creation;
+        const environment = connectedEnvironments.find(
+          (candidate) => candidate.environmentId === nextQueuedMessage.environmentId,
+        );
+        const shellStatus = shellStatuses.get(nextQueuedMessage.environmentId) ?? "empty";
+        const serverConfig = serverConfigs.get(nextQueuedMessage.environmentId);
+        let familyRead: ThreadFamilyRead | undefined;
+        if (
+          thread === undefined &&
+          creation === undefined &&
+          serverConfig?.shellThreadFamilies === true
+        ) {
+          // The family keeps the row readable through dispatch once it loads; the current shell
+          // generation's read decides whether the thread is gone.
+          if (!familyMountsRef.current.has(nextQueuedMessage.messageId)) {
+            familyMountsRef.current.set(
+              nextQueuedMessage.messageId,
+              threadFamilies.mount(
+                appAtomRegistry,
+                nextQueuedMessage.environmentId,
+                nextQueuedMessage.threadId,
+              ),
+            );
+          }
+          familyRead = threadFamilyRead(
+            appAtomRegistry.get(
+              threadFamilies.familyAtom(
+                nextQueuedMessage.environmentId,
+                nextQueuedMessage.threadId,
+              ),
+            ),
+          );
+          if (familyRead === "settled") {
+            // The rows from this render can lag the family that just settled; decide from the
+            // merged rows as they are now.
+            thread = findThread(
+              appAtomRegistry.get(environmentThreadShells.threadShellsAtom),
+              nextQueuedMessage,
+            );
+          } else if (familyRead === "failed") {
+            threadFamilies.refresh(
               appAtomRegistry,
               nextQueuedMessage.environmentId,
               nextQueuedMessage.threadId,
-            ),
-          );
+            );
+          }
         }
-        familyRead = threadFamilyRead(
-          appAtomRegistry.get(
-            threadFamilies.familyAtom(nextQueuedMessage.environmentId, nextQueuedMessage.threadId),
+        const deliveryAction = resolveThreadOutboxDeliveryAction({
+          isCreation: creation !== undefined,
+          threadExists: thread !== undefined,
+          shellStatus,
+          environmentConnected: environment?.connectionState === "connected",
+          threadBusy: threadRuntimeIsActive(thread?.runtime),
+          ...(familyRead === undefined ? {} : { familyRead }),
+        });
+        if (
+          deliveryAction === "wait" &&
+          shellStatus === "live" &&
+          familyRead !== undefined &&
+          familyRead !== "settled"
+        ) {
+          // An empty family read changes no merged row, so nothing else would wake the drain.
+          scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
+          continue;
+        }
+        if (
+          deliveryAction === "send" &&
+          !operableEnvironments.has(nextQueuedMessage.environmentId)
+        ) {
+          continue;
+        }
+        const dispatchStep = resolveThreadOutboxDispatchStep({
+          deliveryAction,
+          fileAttachments: nextQueuedMessage.attachments.filter(
+            (attachment) => attachment.type === "file",
           ),
-        );
-        if (familyRead === "settled") {
-          // The rows from this render can lag the family that just settled; decide from the
-          // merged rows as they are now.
-          thread = findThread(
-            appAtomRegistry.get(environmentThreadShells.threadShellsAtom),
-            nextQueuedMessage,
-          );
-        } else if (familyRead === "failed") {
-          threadFamilies.refresh(
-            appAtomRegistry,
-            nextQueuedMessage.environmentId,
-            nextQueuedMessage.threadId,
-          );
-        }
-      }
-      const deliveryAction = resolveThreadOutboxDeliveryAction({
-        isCreation: creation !== undefined,
-        threadExists: thread !== undefined,
-        shellStatus,
-        environmentConnected: environment?.connectionState === "connected",
-        threadBusy: threadRuntimeIsActive(thread?.runtime),
-        ...(familyRead === undefined ? {} : { familyRead }),
-      });
-      if (
-        deliveryAction === "wait" &&
-        shellStatus === "live" &&
-        familyRead !== undefined &&
-        familyRead !== "settled"
-      ) {
-        // An empty family read changes no merged row, so nothing else would wake the drain.
-        scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
-        continue;
-      }
-      if (deliveryAction === "send" && !operableEnvironments.has(nextQueuedMessage.environmentId)) {
-        continue;
-      }
-      const dispatchStep = resolveThreadOutboxDispatchStep({
-        deliveryAction,
-        fileAttachments: nextQueuedMessage.attachments.filter(
-          (attachment) => attachment.type === "file",
-        ),
-        serverConfig: serverConfig
-          ? {
-              maxFileUploadBytes:
-                serverConfig.environment.capabilities.fileAttachments?.maxUploadBytes,
-            }
-          : null,
-      });
-      if (dispatchStep.step === "wait") {
-        continue;
-      }
-      if (dispatchStep.step === "retry") {
-        scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
-        continue;
-      }
-      if (dispatchStep.step === "restore") {
-        const attachmentError = dispatchStep.reason;
-        beginDispatchingQueuedMessage(nextQueuedMessage.messageId);
-        void confirmThreadOutboxMessageQueued(nextQueuedMessage)
-          .then((queued) => {
-            if (
-              !queued ||
-              appAtomRegistry.get(editingQueuedMessageIdsAtom)[nextQueuedMessage.messageId]
-            ) {
-              return true;
-            }
-            return restoreQueuedMessage(nextQueuedMessage, attachmentError);
-          })
-          .then((restored) => {
-            if (!restored) {
-              scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
-            }
-          })
-          .finally(() => finishDispatchingQueuedMessage(nextQueuedMessage.messageId));
-        return;
-      }
-      const creationProjectCwd =
-        creation !== undefined
-          ? (findCreationProject(projects, nextQueuedMessage)?.workspaceRoot ??
-            creation.projectCwd ??
-            null)
-          : null;
-      if (deliveryAction === "send" && creation !== undefined) {
-        if (!isQueuedThreadCreationSendable(nextQueuedMessage)) {
+          serverConfig: serverConfig
+            ? {
+                maxFileUploadBytes:
+                  serverConfig.environment.capabilities.fileAttachments?.maxUploadBytes,
+              }
+            : null,
+        });
+        if (dispatchStep.step === "wait") {
           continue;
         }
-        if (creationProjectCwd === null && shellStatus !== "live") {
+        if (dispatchStep.step === "retry") {
+          scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
           continue;
         }
-      }
+        if (dispatchStep.step === "restore") {
+          const attachmentError = dispatchStep.reason;
+          beginDispatchingQueuedMessage(nextQueuedMessage.messageId);
+          void confirmThreadOutboxMessageQueued(nextQueuedMessage)
+            .then((queued) => {
+              if (
+                !queued ||
+                appAtomRegistry.get(editingQueuedMessageIdsAtom)[nextQueuedMessage.messageId]
+              ) {
+                return true;
+              }
+              return restoreQueuedMessage(nextQueuedMessage, attachmentError);
+            })
+            .then((restored) => {
+              if (!restored) {
+                scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
+              }
+            })
+            .finally(() => finishDispatchingQueuedMessage(nextQueuedMessage.messageId));
+          return;
+        }
+        const creationProjectCwd =
+          creation !== undefined
+            ? (findCreationProject(projects, nextQueuedMessage)?.workspaceRoot ??
+              creation.projectCwd ??
+              null)
+            : null;
+        if (deliveryAction === "send" && creation !== undefined) {
+          if (!isQueuedThreadCreationSendable(nextQueuedMessage)) {
+            continue;
+          }
+          if (creationProjectCwd === null && shellStatus !== "live") {
+            continue;
+          }
+        }
 
-      beginDispatchingQueuedMessage(nextQueuedMessage.messageId);
-      const removeQueuedMessage = (warning: string) =>
-        removeThreadOutboxMessage(nextQueuedMessage).then(
-          () => true,
-          (error) => {
-            console.warn(warning, {
-              environmentId: nextQueuedMessage.environmentId,
-              threadId: nextQueuedMessage.threadId,
-              messageId: nextQueuedMessage.messageId,
-              error,
-            });
-            return false;
-          },
-        );
-      // Confirm durability before sending; optimistic enqueue can still roll back on write failure.
-      const delivery = confirmThreadOutboxMessageQueued(nextQueuedMessage).then((queued) => {
-        if (!queued) {
-          return true;
-        }
-        // Re-check editor ownership after confirmation; return true to defer without failure backoff.
-        if (appAtomRegistry.get(editingQueuedMessageIdsAtom)[nextQueuedMessage.messageId]) {
-          return true;
-        }
-        if (deliveryAction === "send") {
-          const liveThread = findThread(
-            appAtomRegistry.get(environmentThreadShells.threadShellsAtom),
-            nextQueuedMessage,
+        beginDispatchingQueuedMessage(nextQueuedMessage.messageId);
+        const removeQueuedMessage = (warning: string) =>
+          removeThreadOutboxMessage(nextQueuedMessage).then(
+            () => true,
+            (error) => {
+              console.warn(warning, {
+                environmentId: nextQueuedMessage.environmentId,
+                threadId: nextQueuedMessage.threadId,
+                messageId: nextQueuedMessage.messageId,
+                error,
+              });
+              return false;
+            },
           );
-          const liveThreadBusy = threadRuntimeIsActive(liveThread?.runtime);
-          const liveDeliveryAction = resolveThreadOutboxDeliveryAction({
-            isCreation: creation !== undefined,
-            threadExists: liveThread !== undefined,
-            shellStatus,
-            environmentConnected: environment?.connectionState === "connected",
-            threadBusy: liveThreadBusy,
-          });
-          if (liveDeliveryAction !== "send") {
+        // Confirm durability before sending; optimistic enqueue can still roll back on write failure.
+        const delivery = confirmThreadOutboxMessageQueued(nextQueuedMessage).then((queued) => {
+          if (!queued) {
             return true;
           }
-        }
-        return deliveryAction === "remove"
-          ? creation !== undefined
-            ? // After restart, always recover delivered creations; lost in-memory state cannot distinguish edits from duplicate payloads.
-              recoverEditedCreationAfterDelivery(nextQueuedMessage)
-            : removeQueuedMessage("[thread-outbox] failed to remove message for a missing thread")
-          : creation !== undefined
-            ? creationProjectCwd !== null
-              ? sendQueuedCreation(nextQueuedMessage, creation, creationProjectCwd)
-              : removeQueuedMessage("[thread-outbox] dropped pending task for a missing project")
-            : thread !== undefined
-              ? sendQueuedMessage(nextQueuedMessage, thread)
-              : Promise.resolve(false);
-      });
-      void delivery
-        .then((sent) => {
-          if (sent) {
-            retryAttemptRef.current.delete(nextQueuedMessage.messageId);
-            retryNotBeforeRef.current.delete(nextQueuedMessage.messageId);
-            const pendingTimer = retryTimersRef.current.get(nextQueuedMessage.messageId);
-            if (pendingTimer !== undefined) {
-              clearTimeout(pendingTimer);
-              retryTimersRef.current.delete(nextQueuedMessage.messageId);
-            }
-            return;
+          // Re-check editor ownership after confirmation; return true to defer without failure backoff.
+          if (appAtomRegistry.get(editingQueuedMessageIdsAtom)[nextQueuedMessage.messageId]) {
+            return true;
           }
-
-          scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
-        })
-        .finally(() => {
-          finishDispatchingQueuedMessage(nextQueuedMessage.messageId);
+          if (deliveryAction === "send") {
+            const liveThread = findThread(
+              appAtomRegistry.get(environmentThreadShells.threadShellsAtom),
+              nextQueuedMessage,
+            );
+            const liveThreadBusy = threadRuntimeIsActive(liveThread?.runtime);
+            const liveDeliveryAction = resolveThreadOutboxDeliveryAction({
+              isCreation: creation !== undefined,
+              threadExists: liveThread !== undefined,
+              shellStatus,
+              environmentConnected: environment?.connectionState === "connected",
+              threadBusy: liveThreadBusy,
+            });
+            if (liveDeliveryAction !== "send") {
+              return true;
+            }
+          }
+          return deliveryAction === "remove"
+            ? creation !== undefined
+              ? // After restart, always recover delivered creations; lost in-memory state cannot distinguish edits from duplicate payloads.
+                recoverEditedCreationAfterDelivery(nextQueuedMessage)
+              : removeQueuedMessage("[thread-outbox] failed to remove message for a missing thread")
+            : creation !== undefined
+              ? creationProjectCwd !== null
+                ? sendQueuedCreation(nextQueuedMessage, creation, creationProjectCwd)
+                : removeQueuedMessage("[thread-outbox] dropped pending task for a missing project")
+              : thread !== undefined
+                ? sendQueuedMessage(nextQueuedMessage, thread)
+                : Promise.resolve(false);
         });
-      return;
-    }
-  }, [
-    connectedEnvironments,
-    dispatchingQueuedMessageId,
-    editingQueuedMessageIds,
-    operableEnvironments,
-    projects,
-    queuedMessagesByThreadKey,
-    retryTick,
-    restoreQueuedMessage,
-    scheduleQueuedMessageRetry,
-    sendQueuedCreation,
-    sendQueuedMessage,
-    serverConfigs,
-    shellStatuses,
-    threads,
-  ]);
+        void delivery
+          .then((sent) => {
+            if (sent) {
+              retryAttemptRef.current.delete(nextQueuedMessage.messageId);
+              retryNotBeforeRef.current.delete(nextQueuedMessage.messageId);
+              const pendingTimer = retryTimersRef.current.get(nextQueuedMessage.messageId);
+              if (pendingTimer !== undefined) {
+                clearTimeout(pendingTimer);
+                retryTimersRef.current.delete(nextQueuedMessage.messageId);
+              }
+              return;
+            }
+
+            scheduleQueuedMessageRetry(nextQueuedMessage.messageId);
+          })
+          .finally(() => {
+            finishDispatchingQueuedMessage(nextQueuedMessage.messageId);
+          });
+        return;
+      }
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- The retry timer restarts dispatch even when the queued-message snapshot is unchanged. */ [
+      connectedEnvironments,
+      dispatchingQueuedMessageId,
+      editingQueuedMessageIds,
+      operableEnvironments,
+      projects,
+      queuedMessagesByThreadKey,
+      retryTick,
+      restoreQueuedMessage,
+      scheduleQueuedMessageRetry,
+      sendQueuedCreation,
+      sendQueuedMessage,
+      serverConfigs,
+      shellStatuses,
+      threads,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
 }

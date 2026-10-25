@@ -236,17 +236,26 @@ export function ComposerEditor({
       nativeEventSnapshotsRef.current,
       mostRecentEventCount,
     );
-  }, [acknowledgesLatestNativeEvent, mostRecentEventCount]);
+  }, [acknowledgesLatestNativeEvent, mostRecentEventCount, nativeEventSnapshotsRef]);
   const assumedValue = props.value;
-  useEffect(() => {
-    // Newer native events make this payload stale; do not record it as applied.
-    if (isNativeEcho || controlledEventCount !== mostRecentEventCountRef.current) return;
-    nativeEventSnapshotsRef.current = assumeComposerControlledState(
-      nativeEventSnapshotsRef.current,
-      controlledEventCount,
+  useEffect(
+    () => {
+      // Newer native events make this payload stale; do not record it as applied.
+      if (isNativeEcho || controlledEventCount !== mostRecentEventCountRef.current) return;
+      nativeEventSnapshotsRef.current = assumeComposerControlledState(
+        nativeEventSnapshotsRef.current,
+        controlledEventCount,
+        assumedValue,
+      );
+    },
+    /* oxlint-disable react/exhaustive-effect-dependencies -- Every changed native payload must update the assumed native snapshot. */ [
       assumedValue,
-    );
-  }, [assumedValue, controlledEventCount, isNativeEcho, controlledDocumentJson]);
+      controlledEventCount,
+      isNativeEcho,
+      controlledDocumentJson,
+      nativeEventSnapshotsRef,
+    ] /* oxlint-enable react/exhaustive-effect-dependencies */,
+  );
   const acceptNativeEvent = useCallback(
     (eventCount: number, value: string, nextSelection: ComposerEditorSelection) => {
       const acknowledgedEventCount = acknowledgeComposerNativeEvent(
