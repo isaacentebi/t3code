@@ -276,18 +276,16 @@ const PANEL_MARGIN = 8;
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MIN_HEIGHT = 220;
 
-/** Keeps the panel inside the viewport, and its header reachable when it is taller. */
+/** Keeps the panel horizontally inside the viewport. Vertically only its header must stay
+ * visible, so users can park the panel low to see the app behind it. */
 function clampPanelPosition(
   viewport: { readonly width: number; readonly height: number },
   x: number,
   y: number,
-  panel: { readonly width: number; readonly height: number },
+  width: number,
 ) {
-  const maxX = Math.max(PANEL_MARGIN, viewport.width - panel.width - PANEL_MARGIN);
-  const maxY = Math.max(
-    PANEL_MARGIN,
-    Math.min(viewport.height - 48, viewport.height - panel.height - PANEL_MARGIN),
-  );
+  const maxX = Math.max(PANEL_MARGIN, viewport.width - width - PANEL_MARGIN);
+  const maxY = Math.max(PANEL_MARGIN, viewport.height - 48);
   return {
     x: Math.min(Math.max(x, PANEL_MARGIN), maxX),
     y: Math.min(Math.max(y, PANEL_MARGIN), maxY),
@@ -351,22 +349,12 @@ export function ThemeEditorPanel({
   const [isInspecting, setIsInspecting] = useState(false);
   const [selectedRole, setSelectedRole] = useState<ThemeColorRole | null>(null);
   const [usageCount, setUsageCount] = useState<number | null>(null);
-  // The rendered height is content-sized unless the user resized the panel, so the
-  // position remembers the panel's measured box from the last drag or resize.
-  const [position, setPosition] = useState<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
+  // The rendered width is CSS-sized unless the user resized the panel, so the position
+  // remembers the width measured at the last drag or resize.
+  const [position, setPosition] = useState<{ x: number; y: number; width: number } | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const dragOffsetRef = useRef<{
-    dx: number;
-    dy: number;
-    width: number;
-    height: number;
-  } | null>(null);
+  const dragOffsetRef = useRef<{ dx: number; dy: number; width: number } | null>(null);
   const resizeStartRef = useRef<{
     pointerX: number;
     pointerY: number;
@@ -1015,10 +1003,7 @@ export function ThemeEditorPanel({
   };
   const shownPosition =
     position &&
-    clampPanelPosition(viewport, position.x, position.y, {
-      width: shownSize?.width ?? position.width,
-      height: isMinimized ? 0 : (shownSize?.height ?? position.height),
-    });
+    clampPanelPosition(viewport, position.x, position.y, shownSize?.width ?? position.width);
 
   const handleDragPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button, input, a")) return;
@@ -1028,7 +1013,6 @@ export function ThemeEditorPanel({
       dx: event.clientX - rect.x,
       dy: event.clientY - rect.y,
       width: rect.width,
-      height: rect.height,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -1036,14 +1020,13 @@ export function ThemeEditorPanel({
   const handleDragPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const offset = dragOffsetRef.current;
     if (!offset) return;
-    const box = { width: offset.width, height: isMinimized ? 0 : offset.height };
     const next = clampPanelPosition(
       readWindowViewport(),
       event.clientX - offset.dx,
       event.clientY - offset.dy,
-      box,
+      offset.width,
     );
-    setPosition({ ...next, width: offset.width, height: offset.height });
+    setPosition({ ...next, width: offset.width });
   };
 
   const endDrag = () => {
@@ -1056,8 +1039,8 @@ export function ThemeEditorPanel({
     event.preventDefault();
     // Convert bottom-right parking to explicit position before resizing so the top-left corner stays fixed.
     if (position === null) {
-      const box = { width: rect.width, height: rect.height };
-      setPosition({ ...clampPanelPosition(readWindowViewport(), rect.x, rect.y, box), ...box });
+      const next = clampPanelPosition(readWindowViewport(), rect.x, rect.y, rect.width);
+      setPosition({ ...next, width: rect.width });
     }
     resizeStartRef.current = {
       pointerX: event.clientX,
