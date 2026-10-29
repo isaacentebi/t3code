@@ -247,6 +247,24 @@ describe("ClientSettings notifications", () => {
   });
 });
 
+describe("ClientSettings appearance", () => {
+  it("defaults the appearance style and backdrop for new and older settings", () => {
+    for (const payload of [{}, { glassOpacity: 60 }]) {
+      const settings = decodeClientSettings(payload);
+      expect(settings.appearancePreset).toBe("default");
+      expect(settings.glassBackdrop).toBe("built-in");
+      expect(settings.glassOpacity).toBe("glassOpacity" in payload ? 60 : 80);
+    }
+  });
+
+  it("accepts Liquid Glass style patches and rejects unknown styles", () => {
+    expect(decodeClientSettingsPatch({ appearancePreset: "liquid-glass" })).toEqual({
+      appearancePreset: "liquid-glass",
+    });
+    expect(() => decodeClientSettingsPatch({ appearancePreset: "frosted" })).toThrow();
+  });
+});
+
 describe("ClientSettings quit confirmation", () => {
   it.each([
     [true, "hold"],

@@ -14,9 +14,12 @@ export interface HostedBrowserWebviewWrapperStyle {
   readonly pointerEvents: "auto" | "none";
   readonly borderRadius?: number;
   readonly visibility?: "hidden" | "visible";
+  readonly opacity?: number;
 }
 
 const HIDDEN_BROWSER_WEBVIEW_OFFSET = -100_000;
+// Chromium stops drawing an opacity-0 layer and throttles the guest's frames to 1 fps.
+const RENDERING_HIDDEN_BROWSER_WEBVIEW_OPACITY = 0.001;
 
 export function resolveHostedBrowserWebviewWrapperStyle(input: {
   readonly active: boolean;
@@ -49,7 +52,7 @@ export function resolveHostedBrowserWebviewWrapperStyle(input: {
   }
 
   if (renderingActive) {
-    // Electron stops compositing offscreen guests; keep capture-active guests inside the viewport behind the app.
+    // Electron stops compositing offscreen guests, and a translucent window would show one placed behind the app.
     return {
       left: 0,
       top: 0,
@@ -58,6 +61,7 @@ export function resolveHostedBrowserWebviewWrapperStyle(input: {
       zIndex: -1,
       pointerEvents: "none",
       visibility: "visible",
+      opacity: RENDERING_HIDDEN_BROWSER_WEBVIEW_OPACITY,
     };
   }
 

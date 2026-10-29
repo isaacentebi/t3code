@@ -246,6 +246,17 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.removeListener(IpcChannels.QUIT_SHORTCUT_CHANNEL, wrappedListener);
     };
   },
+  // A sandboxed preload can only load electron, so the renderer decodes material state.
+  getWindowMaterialState: () => ipcRenderer.invoke(IpcChannels.GET_WINDOW_MATERIAL_STATE_CHANNEL),
+  onWindowMaterialStateChanged: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) =>
+      listener(value as Parameters<typeof listener>[0]);
+    ipcRenderer.on(IpcChannels.WINDOW_MATERIAL_STATE_CHANNEL, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(IpcChannels.WINDOW_MATERIAL_STATE_CHANNEL, wrappedListener);
+  },
+  relaunchForWindowMaterial: () =>
+    ipcRenderer.invoke(IpcChannels.RELAUNCH_FOR_WINDOW_MATERIAL_CHANNEL, undefined),
   getWindowFullscreenState: () =>
     ipcRenderer.sendSync(IpcChannels.GET_WINDOW_FULLSCREEN_STATE_CHANNEL) === true,
   getWindowZoomFactor: () => webFrame.getZoomFactor(),

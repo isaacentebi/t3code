@@ -517,6 +517,7 @@ export interface GhosttySelectionPosition {
 export interface GhosttyTerminalSurfaceOptions {
   readonly theme: GhosttyTheme;
   readonly font?: GhosttyTerminalFont;
+  readonly transparentBackground?: boolean;
   /** Read after font and WASM loading. */
   readonly visible?: boolean;
   readonly onData: (data: string) => void;
@@ -674,7 +675,6 @@ export class GhosttyTerminalSurface {
     canvas.className = "block size-full cursor-text";
     canvas.style.touchAction = "pan-x pinch-zoom";
     canvas.setAttribute("aria-hidden", "true");
-
     const input = document.createElement("textarea");
     input.className = "t3-ghostty-input";
     input.setAttribute("aria-label", "Terminal input");
@@ -683,7 +683,6 @@ export class GhosttyTerminalSurface {
     input.spellcheck = false;
     input.style.cssText =
       "position:absolute;left:4px;top:4px;width:1px;height:1px;opacity:0;padding:0;border:0;resize:none;pointer-events:none;";
-
     const scrollbar = document.createElement("div");
     scrollbar.className =
       "group absolute top-1 right-px bottom-1 z-1 w-[var(--app-scrollbar-width)] cursor-default touch-none";
@@ -697,11 +696,11 @@ export class GhosttyTerminalSurface {
       "absolute inset-x-px top-0 rounded-[3px] bg-[var(--app-scrollbar-thumb)] transition-[background-color] duration-[120ms] ease-[ease-out] group-hover:bg-[var(--app-scrollbar-thumb-hover)] group-focus-visible:bg-[var(--app-scrollbar-thumb-hover)]";
     scrollbar.append(scrollbarThumb);
     mount.replaceChildren(canvas, input, scrollbar);
-
-    const context = canvas.getContext("2d", { alpha: false });
+    const context = canvas.getContext("2d", { alpha: options.transparentBackground === true });
     if (!context) throw new Error("Canvas 2D is unavailable");
     context.fillStyle = `rgb(${options.theme.background.r}, ${options.theme.background.g}, ${options.theme.background.b})`;
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    const paint = options.transparentBackground ? "clearRect" : "fillRect";
+    context[paint](0, 0, canvas.width, canvas.height);
     const fontSize = terminalFontSize(options.font?.size);
     try {
       // Load bundled fonts before measuring; fallback metrics would size the wrong grid.
@@ -1994,6 +1993,7 @@ export class GhosttyTerminalSurface {
       padding: CONTENT_PADDING,
       originY: this.originY,
       forceFull: this.forceFullRender,
+      transparentBackground: this.options.transparentBackground === true,
       cursorOn: this.cursorOn,
       previousCursorY: this.renderedCursorY,
       focused: this.focused,

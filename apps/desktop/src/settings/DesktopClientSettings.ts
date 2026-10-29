@@ -10,6 +10,8 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Ref from "effect/Ref";
+import * as Semaphore from "effect/Semaphore";
+import * as Scope from "effect/Scope";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 
@@ -65,6 +67,9 @@ export class DesktopClientSettingsWriteError extends Schema.TaggedError<DesktopC
 export class DesktopClientSettings extends Context.Service<
   DesktopClientSettings,
   {
+    readonly onCommitted: (
+      listener: (settings: ClientSettings) => void,
+    ) => Effect.Effect<void, never, Scope.Scope>;
     readonly get: Effect.Effect<Option.Option<ClientSettings>, DesktopClientSettingsReadError>;
     readonly set: (
       settings: ClientSettings,
@@ -127,7 +132,7 @@ const writeClientSettings = Effect.fnUntraced(function* (input: {
   readonly settingsPath: string;
   readonly settings: ClientSettings;
   readonly suffix: string;
-}): Effect.fn.Return<void, DesktopClientSettingsWriteError> {
+}): Effect.fn.Return<ClientSettings, DesktopClientSettingsWriteError> {
   const targetPath = yield* resolveSymlinkTarget(input.settingsPath).pipe(
     Effect.provideService(FileSystem.FileSystem, input.fileSystem),
     Effect.provideService(Path.Path, input.path),
@@ -143,6 +148,16 @@ const writeClientSettings = Effect.fnUntraced(function* (input: {
   const directory = input.path.dirname(targetPath);
   const tempPath = `${targetPath}.${process.pid}.${input.suffix}.tmp`;
   const encoded = yield* encodeClientSettingsJson(input.settings).pipe(
+    Effect.mapError(
+      (cause) =>
+        new DesktopClientSettingsWriteError({
+          operation: "encode-document",
+          path: input.settingsPath,
+          cause,
+        }),
+    ),
+  );
+  const decoded = yield* decodeClientSettingsJson(encoded).pipe(
     Effect.mapError(
       (cause) =>
         new DesktopClientSettingsWriteError({
@@ -182,15 +197,49 @@ const writeClientSettings = Effect.fnUntraced(function* (input: {
         }),
     ),
   );
+  return decoded;
 });
+
+const makeCommittedListeners = () => {
+  const listeners = new Set<(settings: ClientSettings) => void>();
+  return {
+    onCommitted: Effect.fn("desktop.clientSettings.onCommitted")(
+      (listener: (settings: ClientSettings) => void) =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            listeners.add(listener);
+          }),
+          () =>
+            Effect.sync(() => {
+              listeners.delete(listener);
+            }),
+        ),
+    ),
+    publish: Effect.fn("desktop.clientSettings.publish")((settings: ClientSettings) =>
+      Effect.forEach(
+        listeners,
+        (listener) =>
+          Effect.sync(() => listener(settings)).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("Desktop settings listener failed.", cause),
+            ),
+          ),
+        { discard: true },
+      ),
+    ),
+  };
+};
 
 export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const crypto = yield* Crypto.Crypto;
+  const semaphore = yield* Semaphore.make(1);
+  const committed = makeCommittedListeners();
 
   return DesktopClientSettings.of({
+    onCommitted: committed.onCommitted,
     get: readClientSettings(fileSystem, environment.clientSettingsPath).pipe(
       Effect.withSpan("desktop.clientSettings.get"),
     ),
@@ -214,6 +263,9 @@ export const make = Effect.gen(function* () {
             suffix,
           }),
         ),
+        Effect.flatMap(committed.publish),
+        Effect.uninterruptible,
+        semaphore.withPermits(1),
       );
     }),
   });
@@ -226,10 +278,17 @@ export const layerTest = (initialSettings: Option.Option<ClientSettings> = Optio
     DesktopClientSettings,
     Effect.gen(function* () {
       const settingsRef = yield* Ref.make(initialSettings);
+      const semaphore = yield* Semaphore.make(1);
+      const committed = makeCommittedListeners();
       return DesktopClientSettings.of({
+        onCommitted: committed.onCommitted,
         get: Ref.get(settingsRef),
         set: Effect.fn("DesktopClientSettings.set")(function (settings) {
-          return Ref.set(settingsRef, Option.some(settings));
+          return Ref.set(settingsRef, Option.some(settings)).pipe(
+            Effect.andThen(committed.publish(settings)),
+            Effect.uninterruptible,
+            semaphore.withPermits(1),
+          );
         }),
       });
     }),

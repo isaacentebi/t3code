@@ -7,6 +7,9 @@ import { Skeleton } from "./ui/skeleton";
 
 export type DiffPanelMode = "inline" | "sheet" | "sidebar" | "embedded";
 
+export const DIFF_SURFACE_TOOLBAR_CLASS =
+  "@container flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background px-4 text-xs text-muted-foreground";
+
 function getDiffPanelHeaderRowClassName(mode: DiffPanelMode) {
   const shouldUseDragRegion = isElectron && mode !== "sheet" && mode !== "embedded";
   return cn(
@@ -27,6 +30,7 @@ export function DiffPanelShell(props: {
 
   return (
     <div
+      data-glass-layer
       className={cn(
         "flex h-full min-w-0 flex-col bg-background",
         props.mode === "inline"
@@ -92,6 +96,7 @@ function DiffCodeLineSkeleton({ width }: { width: "short" | "medium" | "long" })
 export function DiffPanelLoadingState(props: { label: string }) {
   return (
     <div
+      data-glass-layer
       className="min-h-0 flex-1 overflow-hidden bg-background"
       role="status"
       aria-live="polite"

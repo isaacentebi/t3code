@@ -60,6 +60,7 @@ describe("preview IPC methods", () => {
           manager as PreviewManager.PreviewManager["Service"],
         ),
         Effect.provideService(DesktopClientSettings.DesktopClientSettings, {
+          onCommitted: () => Effect.void,
           get: Effect.succeedNone,
           set: () => Effect.void,
         }),

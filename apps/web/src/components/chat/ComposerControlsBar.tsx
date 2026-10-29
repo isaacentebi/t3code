@@ -279,7 +279,7 @@ export function ComposerControlsBar(props: {
       open={modelPickerOpen}
       instanceIndicatorBackground={
         composerControlsCollapsed
-          ? "color-mix(in srgb, var(--chat-composer-glass-surface) var(--glass-opacity), transparent)"
+          ? "color-mix(in srgb, var(--chat-composer-glass-surface) var(--glass-surface-opacity), transparent)"
           : "var(--contrast-input)"
       }
       {...(modelPickerIconClassName

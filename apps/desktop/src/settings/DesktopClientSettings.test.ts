@@ -6,6 +6,8 @@ import {
   type ClientSettings,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -111,6 +113,113 @@ const withClientSettings = <A, E, R>(
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped);
 
 describe("DesktopClientSettings", () => {
+  it.effect(
+    "publishes committed preferences only after rename and serializes concurrent writers",
+    () =>
+      withClientSettings(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const environment = yield* DesktopEnvironment.DesktopEnvironment;
+          const entered = yield* Deferred.make<void>();
+          const resume = yield* Deferred.make<void>();
+          const published: ClientSettings[] = [];
+          let renames = 0;
+          const files = new Map<string, string>();
+          const settings = yield* DesktopClientSettings.make.pipe(
+            Effect.provideService(
+              FileSystem.FileSystem,
+              FileSystem.FileSystem.of({
+                ...fs,
+                readLink: (path) =>
+                  Effect.fail(
+                    PlatformError.systemError({
+                      _tag: "NotFound",
+                      module: "FileSystem",
+                      method: "readLink",
+                      pathOrDescriptor: path,
+                    }),
+                  ),
+                makeDirectory: () => Effect.void,
+                writeFileString: (path, value) =>
+                  Effect.sync(() => {
+                    files.set(path, value);
+                  }),
+                rename: (from, to) =>
+                  Effect.gen(function* () {
+                    renames++;
+                    if (renames === 1) {
+                      yield* Deferred.succeed(entered, undefined);
+                      yield* Deferred.await(resume);
+                    }
+                    const contents = files.get(from);
+                    if (contents === undefined) return yield* Effect.die("missing temporary file");
+                    files.set(to, contents);
+                    files.delete(from);
+                  }),
+              }),
+            ),
+          );
+          yield* settings.onCommitted((value) => published.push(value));
+          const first = yield* settings.set(clientSettings).pipe(Effect.forkChild);
+          yield* Deferred.await(entered);
+          const secondValue = { ...clientSettings, desktopSystemMaterialEnabled: true };
+          const secondStarted = yield* Deferred.make<void>();
+          const second = yield* Deferred.succeed(secondStarted, undefined).pipe(
+            Effect.andThen(settings.set(secondValue)),
+            Effect.forkChild({ startImmediately: true }),
+          );
+          yield* Deferred.await(secondStarted);
+          const renamesBeforeRelease = renames;
+          const publishedBeforeRelease = [...published];
+          yield* Deferred.succeed(resume, undefined);
+          yield* Fiber.join(first);
+          yield* Fiber.join(second);
+          assert.equal(renamesBeforeRelease, 1);
+          assert.deepEqual(publishedBeforeRelease, []);
+          assert.deepEqual(published, [clientSettings, secondValue]);
+          assert.deepEqual(
+            yield* decodeClientSettingsJson(files.get(environment.clientSettingsPath) ?? ""),
+            secondValue,
+          );
+        }),
+      ),
+  );
+
+  it.effect("failed replacement publishes nothing and releases the writer permit", () =>
+    withClientSettings(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        let fail = true;
+        const settings = yield* DesktopClientSettings.make.pipe(
+          Effect.provideService(
+            FileSystem.FileSystem,
+            FileSystem.FileSystem.of({
+              ...fs,
+              rename: (from, to) =>
+                fail
+                  ? Effect.fail(
+                      PlatformError.systemError({
+                        _tag: "PermissionDenied",
+                        module: "FileSystem",
+                        method: "rename",
+                      }),
+                    )
+                  : fs.rename(from, to),
+            }),
+          ),
+        );
+        const published: ClientSettings[] = [];
+        yield* settings.onCommitted((value) => published.push(value));
+        const error = yield* settings.set(clientSettings).pipe(Effect.flip);
+        assert.equal(error.operation, "replace-settings-file");
+        assert.deepEqual(published, []);
+        fail = false;
+        yield* settings.set(clientSettings);
+        assert.deepEqual(published, [clientSettings]);
+      }),
+    ),
+  );
+
   it.effect("saves through a symlinked client settings file without replacing the link", () =>
     withClientSettings(
       Effect.gen(function* () {

@@ -44,6 +44,7 @@ import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts"
 import * as ElectronMenu from "../electron/ElectronMenu.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
 import * as ElectronTheme from "../electron/ElectronTheme.ts";
+import * as DesktopWindowMaterial from "./material/DesktopWindowMaterial.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import { SNAP_SHOT_EVENT_CHANNEL } from "../ipc/channels.ts";
 import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
@@ -188,10 +189,18 @@ const layerElectronMenu = Layer.succeed(ElectronMenu.ElectronMenu, {
 } satisfies ElectronMenu.ElectronMenu["Service"]);
 
 const layerElectronTheme = Layer.succeed(ElectronTheme.ElectronTheme, {
+  accessibility: Effect.succeed({ reducedTransparency: false, highContrast: false }),
   shouldUseDarkColors: Effect.succeed(false),
   setSource: () => Effect.void,
   onUpdated: () => Effect.void,
 } satisfies ElectronTheme.ElectronTheme["Service"]);
+
+const layerDesktopWindowMaterial = Layer.mock(DesktopWindowMaterial.DesktopWindowMaterial)({
+  windowOptions: Effect.succeed({}),
+  attach: () => Effect.void,
+  afterReveal: () => Effect.void,
+  syncAppearance: () => Effect.void,
+});
 
 const layerDesktopEnvironment = DesktopEnvironment.layer(environmentInput).pipe(
   Layer.provide(
@@ -322,6 +331,7 @@ function layerTest(input: {
             }),
         } satisfies ElectronShell.ElectronShell["Service"]),
         layerElectronTheme,
+        layerDesktopWindowMaterial,
         layerElectronWindow,
         Layer.mock(PreviewPasskeys.PreviewPasskeys)({
           bridgeEnabled: false,
@@ -432,6 +442,7 @@ const makeSplashScenario = (createOutcomes: readonly (Electron.BrowserWindow | n
             copyText: () => Effect.void,
           } satisfies ElectronShell.ElectronShell["Service"]),
           layerElectronTheme,
+          layerDesktopWindowMaterial,
           Layer.succeed(ElectronWindow.ElectronWindow, electronWindowShape),
           Layer.mock(PreviewPasskeys.PreviewPasskeys)({
             bridgeEnabled: false,

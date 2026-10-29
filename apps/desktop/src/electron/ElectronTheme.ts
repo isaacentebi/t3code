@@ -22,6 +22,10 @@ export class ElectronThemeSetSourceError extends Schema.TaggedError<ElectronThem
 export class ElectronTheme extends Context.Service<
   ElectronTheme,
   {
+    readonly accessibility: Effect.Effect<{
+      readonly reducedTransparency: boolean;
+      readonly highContrast: boolean;
+    }>;
     readonly shouldUseDarkColors: Effect.Effect<boolean>;
     readonly setSource: (theme: DesktopTheme) => Effect.Effect<void, ElectronThemeSetSourceError>;
     readonly onUpdated: (listener: () => void) => Effect.Effect<void, never, Scope.Scope>;
@@ -30,6 +34,10 @@ export class ElectronTheme extends Context.Service<
 
 /** @public */
 export const make = ElectronTheme.of({
+  accessibility: Effect.sync(() => ({
+    reducedTransparency: Electron.nativeTheme.prefersReducedTransparency,
+    highContrast: Electron.nativeTheme.shouldUseHighContrastColors,
+  })),
   shouldUseDarkColors: Effect.sync(() => Electron.nativeTheme.shouldUseDarkColors),
   setSource: Effect.fn("ElectronTheme.setSource")(function (theme) {
     return Effect.try({

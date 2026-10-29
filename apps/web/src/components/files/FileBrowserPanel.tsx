@@ -475,6 +475,7 @@ export default function FileBrowserPanel({
     <div
       className="flex min-h-0 flex-1 flex-col bg-background"
       data-file-browser-panel={`${environmentId}:${cwd}`}
+      data-glass-layer
       // Capture runs before the tree's shadow-internal row handler opens the menu.
       onContextMenuCapture={(event) => {
         contextMenuPointerRef.current = { x: event.clientX, y: event.clientY, at: event.timeStamp };

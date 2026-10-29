@@ -129,6 +129,7 @@ export function PullRequestDetailGhost({
     <div
       role="status"
       aria-label={`Loading ${terminology.singular}`}
+      data-glass-layer
       className={cn(
         "flex h-full min-h-0 flex-col overflow-hidden bg-background",
         !seed && "motion-safe:animate-skeleton",

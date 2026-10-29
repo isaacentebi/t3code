@@ -152,6 +152,7 @@ async function hydrateClientSettings(): Promise<void> {
       if (persistedSettings) {
         replaceClientSettingsSnapshot({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings });
       }
+      lastPersistedClientSettings = getClientSettingsSnapshot();
       setClientSettingsHydrationStatus("ready");
     } catch (error) {
       if (hydrationGeneration === clientSettingsHydrationGeneration) {
@@ -175,8 +176,27 @@ async function hydrateClientSettings(): Promise<void> {
   return clientSettingsHydrationPromise;
 }
 
-const defaultClientSettingsPersistence = (settings: ClientSettings): Promise<void> =>
-  ensureLocalApi().persistence.setClientSettings(settings);
+let lastPersistedClientSettings: ClientSettings | null = null;
+const clientSettingsPersistedListeners = new Set<
+  (previous: ClientSettings, next: ClientSettings) => void
+>();
+
+/** Writes from this window that the store accepted; failed and rolled-back writes never appear. */
+export function onClientSettingsPersisted(
+  listener: (previous: ClientSettings, next: ClientSettings) => void,
+): () => void {
+  clientSettingsPersistedListeners.add(listener);
+  return () => {
+    clientSettingsPersistedListeners.delete(listener);
+  };
+}
+
+const defaultClientSettingsPersistence = async (settings: ClientSettings): Promise<void> => {
+  await ensureLocalApi().persistence.setClientSettings(settings);
+  const previous = lastPersistedClientSettings ?? settings;
+  lastPersistedClientSettings = settings;
+  for (const listener of clientSettingsPersistedListeners) listener(previous, settings);
+};
 
 function enqueueClientSettingsPersistence<A>(work: () => Promise<A>): Promise<A> {
   const result = clientSettingsPersistenceQueue.then(work);
@@ -738,6 +758,7 @@ export function __resetClientSettingsPersistenceForTests(): void {
   clientSettingsHydrationPromise = null;
   clientSettingsPersistenceQueue = Promise.resolve();
   deferredClientSettingsPatchCount = 0;
+  lastPersistedClientSettings = null;
   clientSettingsListeners.clear();
   clientSettingsHydrationListeners.clear();
 }

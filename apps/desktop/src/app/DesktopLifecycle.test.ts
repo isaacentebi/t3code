@@ -58,6 +58,7 @@ function layerElectronApp(
 }
 
 const layerElectronTheme = Layer.succeed(ElectronTheme.ElectronTheme, {
+  accessibility: Effect.succeed({ reducedTransparency: false, highContrast: false }),
   shouldUseDarkColors: Effect.succeed(false),
   setSource: () => Effect.void,
   onUpdated: () => Effect.void,

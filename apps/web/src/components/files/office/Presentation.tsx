@@ -98,7 +98,7 @@ export default function Presentation(props: {
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className={FILE_SURFACE_SUBHEADER_CLASS}>
+      <div className={FILE_SURFACE_SUBHEADER_CLASS} data-glass-layer>
         <FileSurfaceAction
           label="Previous slide"
           disabled={page === 0}

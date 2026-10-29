@@ -73,7 +73,16 @@ describe("searchSettings", () => {
 
   it("matches normalized title substrings", () => {
     expect(searchSettings("  WORD   WRAP  ", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
-    expect(searchSettings("glass").map((item) => item.id)).toEqual(["setting-glass-opacity"]);
+    expect(searchSettings("glass").map((item) => item.id)).toContain("setting-glass-opacity");
+    expect(
+      searchSettings("liquid glass").find((item) => item.id === "appearance-style"),
+    ).toMatchObject({
+      title: "Style",
+      to: "/settings/appearance",
+    });
+    expect(
+      searchSettings("custom backdrop").find((item) => item.id === "appearance-background"),
+    ).toMatchObject({ title: "Background", to: "/settings/appearance" });
     expect(searchSettings("panel animations").map((item) => item.id)).toEqual(["panel-animations"]);
     expect(searchSettings("thè\u{1ab0}mes")[0]?.id).toBe("theme");
     const localeLowerCase = vi.spyOn(String.prototype, "toLocaleLowerCase").mockReturnValue("gıt");
@@ -102,6 +111,27 @@ describe("searchSettings", () => {
     expect(searchSettings("hold to quit")).toEqual([]);
     expect(searchSettings("wsl")).toEqual([]);
     expect(searchSettings("update track")).toEqual([]);
+  });
+
+  it("hides System glass when the desktop bridge has no material API", () => {
+    const item: SettingsSearchItem = {
+      id: "desktop-system-material",
+      title: "System glass",
+      to: "/settings/appearance",
+      requiresDesktopWindowMaterial: true,
+    };
+    try {
+      vi.stubGlobal("window", { desktopBridge: {} });
+      expect(searchSettings("system glass", [item])).toEqual([]);
+      vi.stubGlobal("window", {
+        desktopBridge: { getWindowMaterialState: vi.fn(), onWindowMaterialStateChanged: vi.fn() },
+      });
+      expect(searchSettings("system glass", [item]).map((result) => result.id)).toEqual([
+        "desktop-system-material",
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("hides settings whose controls are unavailable", () => {

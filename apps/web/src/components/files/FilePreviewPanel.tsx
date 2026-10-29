@@ -1233,7 +1233,7 @@ export default function FilePreviewPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div data-glass-layer className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {breadcrumbPath !== null && breadcrumbTrail !== null ? (
         <div className={FILE_SURFACE_SUBHEADER_CLASS} data-surface-subheader>
           <ScrollArea
@@ -1606,7 +1606,7 @@ export function WorkspaceLargeTextPreview(props: {
   const src = `${loaded.url}${loaded.url.includes("?") ? "&" : "?"}revision=${encodeURIComponent(loaded.revision)}`;
   return (
     <>
-      <div className={FILE_SURFACE_SUBHEADER_CLASS}>
+      <div className={FILE_SURFACE_SUBHEADER_CLASS} data-glass-layer>
         <span className="min-w-0 flex-1 text-xs text-muted-foreground">Full file</span>
         <FileSurfaceAction
           label={isCopied ? "Copied" : "Copy contents"}

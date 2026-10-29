@@ -73,11 +73,15 @@ function startClientAppearance(): void {
     }
     if (previous?.glassOpacity !== settings.glassOpacity) {
       root.style.setProperty("--glass-opacity", `${settings.glassOpacity}%`);
+      root.toggleAttribute("data-glass-solid", settings.glassOpacity === 100);
       if (settings.glassOpacity === 100) {
         root.style.setProperty("--glass-blur", "0px");
       } else {
         root.style.removeProperty("--glass-blur");
       }
+    }
+    if (previous?.appearancePreset !== settings.appearancePreset) {
+      root.dataset.appearancePreset = settings.appearancePreset;
     }
     if (
       previous?.fontFamilySans !== settings.fontFamilySans ||

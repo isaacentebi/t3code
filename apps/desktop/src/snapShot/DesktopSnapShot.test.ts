@@ -499,13 +499,11 @@ const layerTest = (
             linuxApplicationsDir: "/test-data/applications",
           } as DesktopEnvironment.DesktopEnvironment["Service"]),
         ),
-        Layer.succeed(
-          DesktopClientSettings.DesktopClientSettings,
-          DesktopClientSettings.DesktopClientSettings.of({
-            get: settingsGet,
-            set: () => Effect.void,
-          }),
-        ),
+        Layer.mock(DesktopClientSettings.DesktopClientSettings)({
+          onCommitted: () => Effect.void,
+          get: settingsGet,
+          set: () => Effect.void,
+        }),
         Layer.succeed(
           DesktopWindow.DesktopWindow,
           DesktopWindow.DesktopWindow.of({

@@ -5,6 +5,21 @@ appearance or stay in light or dark mode. To use different themes for light and 
 the corresponding preview within each theme. Appearance preferences are saved separately on each
 device or browser.
 
+In the desktop app, turn on **System glass** in **Settings → Appearance** to use Liquid Glass on
+Macs with Apple silicon running macOS 26 or later, or Mica on Windows 11 22H2 or later. On macOS
+turning it on takes effect after T3 Code restarts: choose **Restart now** when it asks, or **Restart**
+next to System glass later. The glass is tinted for light or dark mode, so custom theme colors do
+not show through the sidebar and title bar. System glass is off at 100% glass opacity or while
+reduced transparency or high contrast is enabled.
+
+Choose **Liquid Glass** under **Style** in **Settings → Appearance** to turn the sidebar, chat,
+panels, terminal, and dialogs into tinted glass. Under **Background**, keep the built-in code
+landscape or choose your own image; the image stays on this device. In the desktop app on a Mac
+with Apple silicon and macOS 26 or later, or on Windows 11 22H2 or later, Liquid Glass uses System
+glass and your desktop shows through instead; on macOS this takes effect after you restart T3 Code.
+**Glass opacity** sets how much the panels let through, and at 100% or with reduced transparency or
+high contrast they become solid. **Toggle Liquid Glass** in the command palette switches the style.
+
 On web and desktop, use **Change theme** in the command palette to select a theme without leaving chat.
 Press **Cmd+Option+A** on macOS or **Ctrl+Alt+A** on Windows/Linux to open the theme picker directly.
 Use **Change appearance** in the command palette to choose System, Light, or Dark independently of

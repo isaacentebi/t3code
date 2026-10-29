@@ -3,6 +3,7 @@ import { MonitorIcon, MoonIcon, PaletteIcon, SunIcon } from "lucide-react";
 
 import { useCustomThemes } from "../hooks/useCustomThemes";
 import { useEnvironmentThemeDefinitions } from "../hooks/useEnvironmentTheme";
+import { updateClientSettings, useClientSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
 import { getThemeDefinition } from "../themePalette";
 import {
@@ -64,6 +65,7 @@ export function useCommandPaletteThemeItems() {
     setThemeHalf,
   } = useTheme();
   const themeCards = useThemeCards();
+  const appearancePreset = useClientSettings((settings) => settings.appearancePreset);
 
   const changeThemeItem: CommandPaletteSubmenuItem = {
     kind: "submenu",
@@ -143,6 +145,23 @@ export function useCommandPaletteThemeItems() {
     ],
   };
 
+  const changeStyleItem: CommandPaletteActionItem = {
+    kind: "action",
+    value: "action:change-style",
+    searchTerms: ["change style", "liquid glass", "transparent", "translucent", "frosted"],
+    title: "Toggle Liquid Glass",
+    description:
+      appearancePreset === "liquid-glass"
+        ? "Switch to Default style"
+        : "Switch to Liquid Glass style",
+    icon: <PaletteIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await updateClientSettings({
+        appearancePreset: appearancePreset === "liquid-glass" ? "default" : "liquid-glass",
+      });
+    },
+  };
+
   const themeEditorItem: CommandPaletteActionItem = {
     kind: "action",
     value: "action:theme-editor",
@@ -159,5 +178,5 @@ export function useCommandPaletteThemeItems() {
     },
   };
 
-  return { changeThemeItem, changeAppearanceItem, themeEditorItem };
+  return { changeThemeItem, changeAppearanceItem, changeStyleItem, themeEditorItem };
 }

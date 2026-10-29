@@ -109,7 +109,7 @@ export default function OfficeViewer(props: {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {details ? (
-        <div className={FILE_SURFACE_SUBHEADER_CLASS}>
+        <div className={FILE_SURFACE_SUBHEADER_CLASS} data-glass-layer>
           <span className="text-xs text-muted-foreground" aria-live="polite">
             {details}
             {props.kind !== "xlsx" ? " · Fit to width" : ""}

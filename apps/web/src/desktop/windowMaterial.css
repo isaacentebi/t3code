@@ -1,0 +1,66 @@
+html[data-desktop-client][data-desktop-glass-opaque] {
+  :is(.surface-glass, .alert-glass, .dialog-glass, .dialog-backdrop, .dropdown-glass) {
+    background: var(--background) !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .dropdown-glass {
+    background: var(--popover) !important;
+  }
+
+  [data-slot="composer-shell"]::before,
+  [data-slot="composer-context-strip"]::before,
+  [data-composer-banner-surface]::before,
+  [data-chat-composer-main-surface],
+  [data-slot="composer-banner-peek"] {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+html[data-desktop-client]:is(
+    [data-desktop-window-material="windows-mica"],
+    [data-desktop-window-material="macos-glass"]
+  ) {
+  /* useTheme's browser-chrome sync writes inline page colors; they would cover the material. */
+  background: transparent !important;
+
+  body {
+    background: transparent !important;
+  }
+
+  :is(
+    [data-app-sidebar] [data-slot="sidebar-inner"],
+    [data-chat-header],
+    [data-workspace-page-header]
+  ) {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  [data-app-sidebar] [data-slot="sidebar-inner"]::before {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  :is(
+    [data-native-material-band],
+    :has(> [data-chat-column] > [data-chat-header]),
+    :has(> [data-workspace-page-header])
+  ) {
+    background: linear-gradient(transparent 0 var(--workspace-topbar-height), var(--background) 0);
+  }
+
+  :is(.dialog-glass, .dialog-backdrop, .dropdown-glass) {
+    background: var(--background) !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .dropdown-glass {
+    background: var(--popover) !important;
+  }
+}
