@@ -1,5 +1,6 @@
 import { ClaudeSettings, ProviderDriverKind } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
+import * as Digest from "effect/crypto/Digest";
 import * as Duration from "effect/Duration";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
@@ -55,6 +56,7 @@ import {
   mergeClaudeProcessEnvironment,
   resolveClaudeHomePath,
 } from "./ClaudeHome.ts";
+import { readClaudeSettingsEnv } from "./ClaudeSkills.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { makeClaudeMaintenanceResolution } from "./ClaudeMaintenance.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
@@ -62,12 +64,12 @@ const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 const DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
 const CAPABILITIES_PROBE_TTL = Duration.minutes(5);
 
-
 export type ClaudeDriverEnv =
   | ClaudeAdapterV2DriverEnv
   | ProviderHost.ProviderHost
   | ChildProcessSpawner.ChildProcessSpawner
   | ResetCreditCoordinator.ResetCreditCoordinator
+  | Digest.Digest
   | SecureRandom.SecureRandom
   | FileSystem.FileSystem
   | HttpClient.HttpClient
@@ -101,7 +103,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
     // wrappers that scope themselves to their cwd refuse to run there.
     const { stateDir } = yield* ServerConfig.ServerConfig;
     const httpClient = yield* HttpClient.HttpClient;
-    const crypto = yield* Crypto.Crypto;
+    const digester = yield* Digest.Digest;
     const latestVersions = yield* ProviderLatestVersions.ProviderLatestVersions;
     const resetCreditCoordinator = yield* ResetCreditCoordinator.ResetCreditCoordinator;
     const catalogService = yield* ModelCatalog.ModelCatalog;
@@ -152,7 +154,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
         enabled,
         config,
       },
-      { scopedLimitNames, onUsageLimits: (update) => snapshot.applyUsageLimits(update) },
+      { scopedLimitNames },
     ).pipe(
       Effect.mapError(
         (cause) =>
@@ -173,7 +175,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
     // Verify the live credential on every refresh; a config path is not an account identity.
     const capabilitiesProbeCache = yield* Cache.makeWith(
       (_key: string) =>
-        probeClaudeCapabilities(effectiveConfig, processEnv, stateDir).pipe(
+        probeClaudeCapabilities(effectiveConfig, processEnv, stateDir, false).pipe(
           Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(Path.Path, path),
         ),
@@ -185,11 +187,20 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       processEnv,
     );
     const resolveCapabilities = Effect.gen(function* () {
+      const settingsEnv = yield* readClaudeSettingsEnv(effectiveConfig, stateDir, processEnv).pipe(
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+      );
       const identity = yield* readClaudeAuthenticatedIdentity(configDir, {
         ...processEnv,
+        ...Object.fromEntries(
+          Object.entries(settingsEnv).flatMap(([key, value]) =>
+            value === undefined ? [] : [[key, String(value)]],
+          ),
+        ),
         ...(effectiveConfig.homePath.trim() ? { CLAUDE_CONFIG_DIR: configDir } : {}),
       }).pipe(
-        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.provideService(Digest.Digest, digester),
         Effect.provideService(HttpClient.HttpClient, httpClient),
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(Path.Path, path),

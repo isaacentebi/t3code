@@ -1,4 +1,5 @@
-import * as Crypto from "effect/Crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as DateTime from "effect/DateTime";
 import * as Hex from "effect/encoding/Hex";
 import * as NodeModule from "node:module";
 
@@ -36,18 +37,67 @@ const Profile = Schema.Struct({
   organization: Schema.Struct({ uuid: Schema.NonEmptyString }),
 });
 
+const Window = Schema.Struct({
+  utilization: Schema.Number,
+  resets_at: Schema.NullOr(Schema.String),
+});
+const Usage = Schema.Struct({
+  five_hour: Schema.optional(Schema.NullOr(Window)),
+  seven_day: Schema.optional(Schema.NullOr(Window)),
+  spend: Schema.optional(Schema.Unknown),
+  extra_usage: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        is_enabled: Schema.Boolean,
+        monthly_limit: Schema.NullOr(Schema.Number),
+        used_credits: Schema.NullOr(Schema.Number),
+        utilization: Schema.NullOr(Schema.Number),
+      }),
+    ),
+  ),
+  limits: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        kind: Schema.String,
+        percent: Schema.optional(Schema.NullOr(Schema.Number)),
+        resets_at: Schema.optional(Schema.NullOr(Schema.String)),
+        scope: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              model: Schema.optional(Schema.NullOr(Schema.Struct({ display_name: Schema.String }))),
+            }),
+          ),
+        ),
+      }),
+    ),
+  ),
+});
+
 interface AuthenticatedIdentity {
   readonly email: string;
   readonly workspaceId: string;
   readonly credentialFingerprint: string;
+  readonly usage: NonNullable<ClaudeCapabilitiesProbe["usage"]>;
+  readonly usageCheckedAt: string;
 }
 
 /** Config files and CLI account metadata can survive a credential switch. Only the token's profile proves ownership. */
 export const readClaudeAuthenticatedIdentity = Effect.fn("readClaudeAuthenticatedIdentity")(
   function* (configDir: string, environment: NodeJS.ProcessEnv) {
-    if (environment.ANTHROPIC_API_KEY?.trim() || environment.ANTHROPIC_AUTH_TOKEN?.trim())
+    const baseUrl = environment.ANTHROPIC_BASE_URL?.trim().replace(/\/+$/, "");
+    const alternateProvider = [
+      environment.CLAUDE_CODE_USE_BEDROCK,
+      environment.CLAUDE_CODE_USE_VERTEX,
+      environment.CLAUDE_CODE_USE_FOUNDRY,
+    ].some((value) => value === "1" || value?.toLowerCase() === "true");
+    if (
+      environment.ANTHROPIC_API_KEY?.trim() ||
+      environment.ANTHROPIC_AUTH_TOKEN?.trim() ||
+      (baseUrl && baseUrl !== "https://api.anthropic.com") ||
+      alternateProvider
+    )
       return undefined;
-    const crypto = yield* Crypto.Crypto;
+    const digester = yield* Digest.Digest;
     let token = environment.CLAUDE_CODE_OAUTH_TOKEN?.trim();
     if (!token) {
       let raw: string | null | undefined;
@@ -55,7 +105,7 @@ export const readClaudeAuthenticatedIdentity = Effect.fn("readClaudeAuthenticate
         const keychainDir =
           environment.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? environment.CLAUDE_CONFIG_DIR;
         const suffix = keychainDir
-          ? `-${Hex.encode(yield* crypto.digest("SHA-256", new TextEncoder().encode(keychainDir.normalize("NFC")))).slice(0, 8)}`
+          ? `-${Hex.encode(yield* digester.digest(Digest.sha256, new TextEncoder().encode(keychainDir.normalize("NFC")))).slice(0, 8)}`
           : "";
         const username = environment.USER || (yield* HostProcess.Username);
         if (!username) return undefined;
@@ -90,11 +140,47 @@ export const readClaudeAuthenticatedIdentity = Effect.fn("readClaudeAuthenticate
     const profile = yield* HttpClientResponse.schemaBodyJson(Profile)(
       yield* HttpClientResponse.filterStatusOk(response),
     );
+    // Capture one token above and use it for both calls, even if another session switches the default login meanwhile.
+    const usageResponse = yield* client.execute(
+      HttpClientRequest.get("https://api.anthropic.com/api/oauth/usage").pipe(
+        HttpClientRequest.setHeaders({
+          authorization: `Bearer ${token}`,
+          "anthropic-beta": "oauth-2025-04-20",
+        }),
+      ),
+    );
+    const usage = yield* HttpClientResponse.schemaBodyJson(Usage)(
+      yield* HttpClientResponse.filterStatusOk(usageResponse),
+    );
+    const model_scoped = (usage.limits ?? []).flatMap((limit) =>
+      limit.kind === "weekly_scoped" && limit.scope?.model && typeof limit.percent === "number"
+        ? [
+            {
+              display_name: limit.scope.model.display_name,
+              utilization: limit.percent,
+              resets_at: limit.resets_at ?? null,
+            },
+          ]
+        : [],
+    );
+    const rateLimits = {
+      five_hour: usage.five_hour ?? null,
+      seven_day: usage.seven_day ?? null,
+      seven_day_opus: null,
+      extra_usage: usage.extra_usage ?? null,
+      model_scoped,
+      spend: usage.spend,
+    };
     return {
       email: profile.account.email,
       workspaceId: profile.organization.uuid,
+      usageCheckedAt: DateTime.formatIso(yield* DateTime.now),
+      usage: {
+        rate_limits_available: true,
+        rate_limits: rateLimits,
+      },
       credentialFingerprint: Hex.encode(
-        yield* crypto.digest("SHA-256", new TextEncoder().encode(token)),
+        yield* digester.digest(Digest.sha256, new TextEncoder().encode(token)),
       ),
     } satisfies AuthenticatedIdentity;
   },
@@ -106,13 +192,13 @@ export function bindClaudeUsageIdentity(
   capabilities: ClaudeCapabilitiesProbe,
   identity: AuthenticatedIdentity | undefined,
 ): ClaudeCapabilitiesProbe {
-  const { usage, usageCheckedAt, ...metadata } = capabilities;
-  const matches =
-    identity && capabilities.email?.trim().toLowerCase() === identity.email.trim().toLowerCase();
+  const metadata = { ...capabilities };
+  delete metadata.usage;
+  delete metadata.usageCheckedAt;
   return {
     ...metadata,
     email: identity?.email,
     workspaceId: identity?.workspaceId,
-    ...(matches && usage ? { usage, usageCheckedAt } : {}),
+    ...(identity ? { usage: identity.usage, usageCheckedAt: identity.usageCheckedAt } : {}),
   };
 }

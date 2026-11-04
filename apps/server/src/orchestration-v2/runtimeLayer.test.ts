@@ -8752,8 +8752,16 @@ const layerClaudeFailoverRegistry = Layer.succeed(
 const layerClaudeFailoverSettings = ServerSettings.layerTest({
   autoResumeLimitedThreads: true,
   providerInstances: {
-    "claude-primary": { driver: "claudeAgent", enabled: true, config: {} },
-    "claude-secondary": { driver: "claudeAgent", enabled: true, config: {} },
+    [claudeFailoverInstances[0]!.instanceId]: {
+      driver: ProviderDriverKind.make("claudeAgent"),
+      enabled: true,
+      config: {},
+    },
+    [claudeFailoverInstances[1]!.instanceId]: {
+      driver: ProviderDriverKind.make("claudeAgent"),
+      enabled: true,
+      config: {},
+    },
   },
 });
 it.layer(

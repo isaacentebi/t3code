@@ -1,4 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as Layer from "effect/Layer";
 import { it, assert } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -15,6 +17,17 @@ import {
 } from "./claudeAuthenticatedIdentity.ts";
 import type { ClaudeCapabilitiesProbe } from "./ClaudeProvider.ts";
 
+const freshUsage: NonNullable<ClaudeCapabilitiesProbe["usage"]> = {
+  rate_limits_available: true,
+  rate_limits: {
+    five_hour: null,
+    seven_day: { utilization: 12, resets_at: null },
+    seven_day_opus: null,
+    extra_usage: null,
+  },
+};
+const quotaResponse = { five_hour: null, seven_day: { utilization: 12, resets_at: null } };
+
 const capabilities: ClaudeCapabilitiesProbe = {
   email: "old@example.com",
   subscriptionType: "max",
@@ -26,42 +39,55 @@ const capabilities: ClaudeCapabilitiesProbe = {
   usageCheckedAt: "2026-11-04T00:00:00Z",
 };
 
-it("does not attribute another credential's usage to stale CLI identity", () => {
+it("replaces stale SDK identity and quota with the same-token authenticated reading", () => {
   const bound = bindClaudeUsageIdentity(capabilities, {
     email: "actual@example.com",
     workspaceId: "actual-org",
     credentialFingerprint: "fingerprint",
+    usage: freshUsage,
+    usageCheckedAt: "2026-11-04T12:00:00Z",
   });
   assert.equal(bound.email, "actual@example.com");
   assert.equal(bound.workspaceId, "actual-org");
-  assert.equal(bound.usage, undefined);
+  assert.equal(bound.usage, freshUsage);
   assert.equal(bindClaudeUsageIdentity(capabilities, undefined).usage, undefined);
   assert.equal(bindClaudeUsageIdentity(capabilities, undefined).email, undefined);
 });
 
-it("keeps quota only when the authenticated profile and usage session agree", () => {
+it("never reuses cached SDK quota for a freshly verified account", () => {
   assert.equal(
     bindClaudeUsageIdentity(capabilities, {
       email: "OLD@example.com",
       workspaceId: "verified-org",
       credentialFingerprint: "fingerprint",
+      usage: freshUsage,
+      usageCheckedAt: "2026-11-04T12:00:00Z",
     }).usage,
-    capabilities.usage,
+    freshUsage,
   );
 });
 
 it.effect("uses the actual token's profile and refuses failed profile reads", () =>
   Effect.gen(function* () {
     const client = HttpClient.make((request) => {
-      assert.equal(request.url, "https://api.anthropic.com/api/oauth/profile");
+      assert.isTrue(
+        [
+          "https://api.anthropic.com/api/oauth/profile",
+          "https://api.anthropic.com/api/oauth/usage",
+        ].includes(request.url),
+      );
       assert.equal(request.headers.authorization, "Bearer test-credential");
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
-          Response.json({
-            account: { uuid: "actual-account", email: "actual@example.com" },
-            organization: { uuid: "actual-org" },
-          }),
+          Response.json(
+            request.url.endsWith("/usage")
+              ? quotaResponse
+              : {
+                  account: { uuid: "actual-account", email: "actual@example.com" },
+                  organization: { uuid: "actual-org" },
+                },
+          ),
         ),
       );
     });
@@ -80,7 +106,7 @@ it.effect("uses the actual token's profile and refuses failed profile reads", ()
       }).pipe(Effect.provideService(HttpClient.HttpClient, unauthorized)),
       undefined,
     );
-  }).pipe(Effect.provide(NodeServices.layer)),
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
 
 it.effect("reads a seeded session file only when its Keychain entry is absent", () =>
@@ -97,10 +123,14 @@ it.effect("reads a seeded session file only when its Keychain entry is absent", 
         return Effect.succeed(
           HttpClientResponse.fromWeb(
             request,
-            Response.json({
-              account: { uuid: "seed-account", email: "seed@example.com" },
-              organization: { uuid: "seed-org" },
-            }),
+            Response.json(
+              request.url.endsWith("/usage")
+                ? quotaResponse
+                : {
+                    account: { uuid: "seed-account", email: "seed@example.com" },
+                    organization: { uuid: "seed-org" },
+                  },
+            ),
           ),
         );
       });
@@ -122,7 +152,7 @@ it.effect("reads a seeded session file only when its Keychain entry is absent", 
       );
       assert.equal(denied, undefined);
     }),
-  ).pipe(Effect.provide(NodeServices.layer)),
+  ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
 
 it.effect("malformed credential documents never enter traced error causes", () =>
@@ -159,5 +189,103 @@ it.effect("malformed credential documents never enter traced error causes", () =
       );
       assert.equal(failures.join("\n").includes(secret), false);
     }),
-  ).pipe(Effect.provide(NodeServices.layer)),
+  ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
+
+it.effect(
+  "keeps identity and quota on one token while a concurrent switch changes the credential file",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = yield* fs.makeTempDirectoryScoped();
+        const credentialsPath = `${directory}/.credentials.json`;
+        const writeCredential = (accessToken: string) =>
+          fs.writeFileString(credentialsPath, JSON.stringify({ claudeAiOauth: { accessToken } }));
+        yield* writeCredential("account-a-token");
+        let usageCalls = 0;
+        const client = HttpClient.make((request) =>
+          Effect.gen(function* () {
+            assert.equal(request.headers.authorization, "Bearer account-a-token");
+            if (request.url.endsWith("/profile")) {
+              yield* writeCredential("account-b-token").pipe(Effect.orDie);
+              return HttpClientResponse.fromWeb(
+                request,
+                Response.json({
+                  account: { uuid: "a", email: "a@example.com" },
+                  organization: { uuid: "org-a" },
+                }),
+              );
+            }
+            usageCalls++;
+            return HttpClientResponse.fromWeb(request, Response.json(quotaResponse));
+          }),
+        );
+        const reading = yield* readClaudeAuthenticatedIdentity(directory, {}).pipe(
+          Effect.provideService(HostProcess.Platform, "linux"),
+          Effect.provideService(HttpClient.HttpClient, client),
+        );
+        assert.equal(reading?.email, "a@example.com");
+        assert.equal(reading?.usage?.rate_limits?.seven_day?.utilization, 12);
+        assert.equal(usageCalls, 1);
+      }),
+    ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
+
+it.effect("a usage429 publishes unknown rather than cached SDK usage", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          request.url.endsWith("/profile")
+            ? Response.json({
+                account: { uuid: "a", email: "a@example.com" },
+                organization: { uuid: "org-a" },
+              })
+            : Response.json({}, { status: 429 }),
+        ),
+      ),
+    );
+    const reading = yield* readClaudeAuthenticatedIdentity("/unused", {
+      CLAUDE_CODE_OAUTH_TOKEN: "test-token",
+    }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    assert.equal(reading, undefined);
+    assert.equal(bindClaudeUsageIdentity(capabilities, reading).usage, undefined);
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
+
+it.effect("does not offer subscription quota when Claude uses API or gateway authentication", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json(
+            request.url.endsWith("/usage")
+              ? quotaResponse
+              : {
+                  account: { uuid: "account", email: "account@example.com" },
+                  organization: { uuid: "organization" },
+                },
+          ),
+        ),
+      ),
+    );
+    for (const override of [
+      { ANTHROPIC_API_KEY: "test-api-key" },
+      { ANTHROPIC_AUTH_TOKEN: "test-gateway-token" },
+      { ANTHROPIC_BASE_URL: "https://gateway.example.com" },
+      { CLAUDE_CODE_USE_BEDROCK: "1" },
+      { CLAUDE_CODE_USE_VERTEX: "1" },
+      { CLAUDE_CODE_USE_FOUNDRY: "1" },
+    ]) {
+      assert.isUndefined(
+        yield* readClaudeAuthenticatedIdentity("/unused", {
+          CLAUDE_CODE_OAUTH_TOKEN: "test-subscription-token",
+          ...override,
+        }).pipe(Effect.provideService(HttpClient.HttpClient, client)),
+      );
+    }
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
