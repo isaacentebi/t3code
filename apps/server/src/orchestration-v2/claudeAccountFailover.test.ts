@@ -40,6 +40,21 @@ const selection = {
   model: "opus",
 } as ModelSelection;
 describe("Claude account failover", () => {
+  it("can try a weekly-healthy account with an unreported five-hour balance", () => {
+    const target = provider("second");
+    const unknownSession = {
+      ...target,
+      usageLimits: {
+        ...target.usageLimits!,
+        windows: target.usageLimits!.windows.filter((window) => window.id !== "five_hour"),
+      },
+    };
+    expect(
+      claudeAccountFailover(selection, [provider("primary", 100), unknownSession], now)?.instanceId,
+    ).toBe("second");
+    expect(unknownSession.usageLimits.windows.map((window) => window.id)).toEqual(["seven_day"]);
+  });
+
   it("preserves the model and selects a distinct measured subscription", () => {
     expect(
       claudeAccountFailover(selection, [provider("primary", 100), provider("second")], now),

@@ -3,7 +3,9 @@ import * as Hex from "effect/encoding/Hex";
 import * as NodeModule from "node:module";
 
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
@@ -12,11 +14,23 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import type { ClaudeCapabilitiesProbe } from "./ClaudeProvider.ts";
 
 const requireForKeyring = NodeModule.createRequire(import.meta.url);
+
+export const ClaudeCredentialKeychain = Context.Reference<
+  (service: string, username: string) => Promise<string | null | undefined>
+>("t3/ClaudeCredentialKeychain", {
+  defaultValue: () => async (service, username) => {
+    const { AsyncEntry } = requireForKeyring(
+      "@napi-rs/keyring",
+    ) as typeof import("@napi-rs/keyring");
+    return new AsyncEntry(service, username).getPassword();
+  },
+});
 const Credentials = Schema.fromJsonString(
   Schema.Struct({
     claudeAiOauth: Schema.optional(Schema.Struct({ accessToken: Schema.optional(Schema.String) })),
   }),
 );
+const decodeCredentials = Schema.decodeOption(Credentials);
 const Profile = Schema.Struct({
   account: Schema.Struct({ uuid: Schema.NonEmptyString, email: Schema.NonEmptyString }),
   organization: Schema.Struct({ uuid: Schema.NonEmptyString }),
@@ -45,19 +59,23 @@ export const readClaudeAuthenticatedIdentity = Effect.fn("readClaudeAuthenticate
           : "";
         const username = environment.USER || (yield* HostProcess.Username);
         if (!username) return undefined;
-        raw = yield* Effect.tryPromise(async () => {
-          const { AsyncEntry } = requireForKeyring(
-            "@napi-rs/keyring",
-          ) as typeof import("@napi-rs/keyring");
-          return new AsyncEntry(`Claude Code-credentials${suffix}`, username).getPassword();
-        });
-      } else {
+        const readKeychain = yield* ClaudeCredentialKeychain;
+        raw = yield* Effect.tryPromise(() =>
+          readKeychain(`Claude Code-credentials${suffix}`, username),
+        );
+      }
+      // Session profiles may be seeded with a file before Claude's first Keychain write.
+      // A rejected Keychain read exits above; only an absent entry permits the file fallback.
+      if (!raw) {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         raw = yield* fs.readFileString(path.join(configDir, ".credentials.json"));
       }
       if (!raw) return undefined;
-      token = (yield* Schema.decodeEffect(Credentials)(raw)).claudeAiOauth?.accessToken?.trim();
+      // Schema errors contain their input. Keep malformed credential documents out of traced failures.
+      const credentials = decodeCredentials(raw);
+      if (Option.isNone(credentials)) return undefined;
+      token = credentials.value.claudeAiOauth?.accessToken?.trim();
     }
     if (!token) return undefined;
     const client = yield* HttpClient.HttpClient;

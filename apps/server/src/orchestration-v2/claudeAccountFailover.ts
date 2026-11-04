@@ -1,6 +1,6 @@
 import type { ModelSelection, ServerProvider, ProviderInstanceId } from "@t3tools/contracts";
 
-/** Never select an API key, an unidentified login, or a partially measured subscription. */
+/** Never select an API key, an unidentified login, or an unmeasured weekly subscription. */
 export function claudeAccountFailover(
   current: ModelSelection,
   providers: readonly ServerProvider[],
@@ -33,10 +33,7 @@ export function claudeAccountFailover(
       Date.parse(limits.checkedAt) > nowMs
     )
       continue;
-    if (
-      !["five_hour", "seven_day"].every((id) => limits.windows.some((window) => window.id === id))
-    )
-      continue;
+    if (!["seven_day"].every((id) => limits.windows.some((window) => window.id === id))) continue;
     if (limits.windows.some((window) => window.usedPercent >= 100)) continue;
     return { ...current, instanceId: target.instanceId };
   }

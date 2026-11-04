@@ -92,7 +92,8 @@ const affectsLimitRecovery = (event: OrchestrationV2DomainEvent) =>
   event.type.startsWith("provider-session.") ||
   (event.type === "turn-item.updated" && event.payload.type === "error");
 
-const makeSweep = Effect.gen(function* () {
+/** @public Integration entry point; production registers the same sweep with Scheduler. */
+export const makeSweep = Effect.gen(function* () {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const threads = yield* ThreadManagement.ThreadManagementService;
   const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -144,7 +145,7 @@ const makeSweep = Effect.gen(function* () {
         preferences.autoResumeLimitedThreads &&
         Option.isSome(registry) &&
         thread.limitRecovery?.autoResume &&
-        thread.usageLimitResetAt !== null &&
+        thread.usageLimitResetAt != null &&
         Date.parse(thread.usageLimitResetAt) > nowMs
       ) {
         const projection = yield* projections.getThreadRecords(thread.id, ["runs", "turnItems"]);

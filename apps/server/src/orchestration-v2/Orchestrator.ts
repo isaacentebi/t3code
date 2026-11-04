@@ -1059,6 +1059,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
   const providerSessions = yield* ProviderSessionManagerV2;
   const providerSwitchService = yield* ProviderSwitchServiceV2;
+  const failoverRegistry = yield* Effect.serviceOption(
+    FailoverProviderInstances.ProviderInstanceRegistry,
+  );
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const runtimePolicy = yield* RuntimePolicyV2;
   const threadForkService = yield* ThreadForkServiceV2;
@@ -5501,11 +5504,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         command.modelSelection &&
         command.modelSelection.instanceId !== projection.thread.modelSelection.instanceId
       ) {
-        const registry = yield* Effect.serviceOption(
-          FailoverProviderInstances.ProviderInstanceRegistry,
-        );
-        if (Option.isSome(registry)) {
-          const instances = yield* registry.value.listInstances;
+        if (Option.isSome(failoverRegistry)) {
+          const instances = yield* failoverRegistry.value.listInstances;
           const providers = yield* Effect.forEach(
             instances,
             (instance) => instance.snapshot.getSnapshot,

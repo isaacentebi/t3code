@@ -189,15 +189,6 @@ export function claudeUsageResponseToLimits(input: {
   const windows: ServerProviderUsageWindow[] = [];
   for (const id of Object.keys(WINDOWS)) {
     const window = response.rate_limits[id as "five_hour" | "seven_day"];
-    // A null session alongside a weekly subscription is an authoritative inactive window.
-    if (
-      id === "five_hour" &&
-      window === null &&
-      typeof response.rate_limits.seven_day?.utilization === "number"
-    ) {
-      windows.push(makeWindow(id, 0, undefined));
-      continue;
-    }
     if (!window || typeof window.utilization !== "number") continue;
     windows.push(makeWindow(id, window.utilization, isoFromString(window.resets_at)));
   }
