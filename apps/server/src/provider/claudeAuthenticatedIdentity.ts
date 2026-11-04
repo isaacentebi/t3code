@@ -77,7 +77,7 @@ interface AuthenticatedIdentity {
   readonly email: string;
   readonly workspaceId: string;
   readonly credentialFingerprint: string;
-  readonly usage: NonNullable<ClaudeCapabilitiesProbe["usage"]>;
+  readonly usage: ClaudeCapabilitiesProbe["usage"];
   readonly usageCheckedAt: string;
 }
 
@@ -141,18 +141,24 @@ export const readClaudeAuthenticatedIdentity = Effect.fn("readClaudeAuthenticate
       yield* HttpClientResponse.filterStatusOk(response),
     );
     // Capture one token above and use it for both calls, even if another session switches the default login meanwhile.
-    const usageResponse = yield* client.execute(
-      HttpClientRequest.get("https://api.anthropic.com/api/oauth/usage").pipe(
-        HttpClientRequest.setHeaders({
-          authorization: `Bearer ${token}`,
-          "anthropic-beta": "oauth-2025-04-20",
-        }),
-      ),
-    );
-    const usage = yield* HttpClientResponse.schemaBodyJson(Usage)(
-      yield* HttpClientResponse.filterStatusOk(usageResponse),
-    );
-    const model_scoped = (usage.limits ?? []).flatMap((limit) =>
+    const usage = yield* client
+      .execute(
+        HttpClientRequest.get("https://api.anthropic.com/api/oauth/usage", {
+          urlParams: { cedar_ember: "1", skip_spend: "1" },
+        }).pipe(
+          HttpClientRequest.setHeaders({
+            authorization: `Bearer ${token}`,
+            "anthropic-beta": "oauth-2025-04-20",
+          }),
+        ),
+      )
+      .pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(Usage)),
+        Effect.timeout("5 seconds"),
+        Effect.orElseSucceed(() => undefined),
+      );
+    const model_scoped = (usage?.limits ?? []).flatMap((limit) =>
       limit.kind === "weekly_scoped" && limit.scope?.model && typeof limit.percent === "number"
         ? [
             {
@@ -163,22 +169,26 @@ export const readClaudeAuthenticatedIdentity = Effect.fn("readClaudeAuthenticate
           ]
         : [],
     );
-    const rateLimits = {
-      five_hour: usage.five_hour ?? null,
-      seven_day: usage.seven_day ?? null,
-      seven_day_opus: null,
-      extra_usage: usage.extra_usage ?? null,
-      model_scoped,
-      spend: usage.spend,
-    };
+    const rateLimits = usage
+      ? {
+          five_hour: usage.five_hour ?? null,
+          seven_day: usage.seven_day ?? null,
+          seven_day_opus: null,
+          extra_usage: usage.extra_usage ?? null,
+          model_scoped,
+          spend: usage.spend,
+        }
+      : undefined;
     return {
       email: profile.account.email,
       workspaceId: profile.organization.uuid,
       usageCheckedAt: DateTime.formatIso(yield* DateTime.now),
-      usage: {
-        rate_limits_available: true,
-        rate_limits: rateLimits,
-      },
+      usage: rateLimits
+        ? {
+            rate_limits_available: true,
+            rate_limits: rateLimits,
+          }
+        : undefined,
       credentialFingerprint: Hex.encode(
         yield* digester.digest(Digest.sha256, new TextEncoder().encode(token)),
       ),
@@ -199,6 +209,6 @@ export function bindClaudeUsageIdentity(
     ...metadata,
     email: identity?.email,
     workspaceId: identity?.workspaceId,
-    ...(identity ? { usage: identity.usage, usageCheckedAt: identity.usageCheckedAt } : {}),
+    ...(identity?.usage ? { usage: identity.usage, usageCheckedAt: identity.usageCheckedAt } : {}),
   };
 }

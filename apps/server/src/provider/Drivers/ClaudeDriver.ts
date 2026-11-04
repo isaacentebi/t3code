@@ -4,6 +4,7 @@ import * as Digest from "effect/crypto/Digest";
 import * as Duration from "effect/Duration";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
@@ -179,7 +180,10 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
           Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(Path.Path, path),
         ),
-      { capacity: 1, timeToLive: () => CAPABILITIES_PROBE_TTL },
+      {
+        capacity: 1,
+        timeToLive: (exit) => (Exit.isSuccess(exit) ? CAPABILITIES_PROBE_TTL : Duration.zero),
+      },
     );
     const capabilitiesCacheKey = yield* makeClaudeCapabilitiesCacheKey(
       effectiveConfig,

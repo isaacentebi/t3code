@@ -77,6 +77,11 @@ it.effect("uses the actual token's profile and refuses failed profile reads", ()
         ].includes(request.url),
       );
       assert.equal(request.headers.authorization, "Bearer test-credential");
+      if (request.url.endsWith("/usage"))
+        assert.deepEqual(Array.from(request.urlParams), [
+          ["cedar_ember", "1"],
+          ["skip_spend", "1"],
+        ]);
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
@@ -232,7 +237,7 @@ it.effect(
     ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
 
-it.effect("a usage429 publishes unknown rather than cached SDK usage", () =>
+it.effect("a usage429 preserves verified identity while publishing unknown quota", () =>
   Effect.gen(function* () {
     const client = HttpClient.make((request) =>
       Effect.succeed(
@@ -250,7 +255,9 @@ it.effect("a usage429 publishes unknown rather than cached SDK usage", () =>
     const reading = yield* readClaudeAuthenticatedIdentity("/unused", {
       CLAUDE_CODE_OAUTH_TOKEN: "test-token",
     }).pipe(Effect.provideService(HttpClient.HttpClient, client));
-    assert.equal(reading, undefined);
+    assert.equal(reading?.email, "a@example.com");
+    assert.equal(reading?.workspaceId, "org-a");
+    assert.equal(reading?.usage, undefined);
     assert.equal(bindClaudeUsageIdentity(capabilities, reading).usage, undefined);
   }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );

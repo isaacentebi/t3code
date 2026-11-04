@@ -8860,28 +8860,42 @@ it.layer(
           ],
         });
         const registry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
+        let claudeRefreshes = 0;
+        let unrelatedRefreshes = 0;
         const sweep = yield* makeSweep.pipe(
           Effect.provideService(
             ProviderInstanceRegistry.ProviderInstanceRegistry,
             scenario === "unavailable"
               ? {
                   ...registry,
-                  listInstances: Effect.succeed(
-                    claudeFailoverInstances.map((instance, index) =>
-                      index === 0
-                        ? instance
-                        : {
-                            ...instance,
-                            snapshot: {
-                              ...instance.snapshot,
-                              refresh: Effect.map(instance.snapshot.refresh, (snapshot) => ({
-                                ...snapshot,
-                                usageLimits: undefined,
-                              })),
-                            },
-                          },
-                    ),
-                  ),
+                  listInstances: Effect.succeed([
+                    ...claudeFailoverInstances.map((instance, index) => ({
+                      ...instance,
+                      snapshot: {
+                        ...instance.snapshot,
+                        getSnapshot: Effect.map(instance.snapshot.getSnapshot, (snapshot) => ({
+                          ...snapshot,
+                          usageLimits: undefined,
+                        })),
+                        refresh: instance.snapshot.refresh.pipe(
+                          Effect.tap(() => Effect.sync(() => claudeRefreshes++)),
+                          Effect.map((snapshot) => ({
+                            ...snapshot,
+                            ...(index === 0 ? {} : { usageLimits: undefined }),
+                          })),
+                        ),
+                      },
+                    })),
+                    {
+                      ...providerInstance,
+                      snapshot: {
+                        ...providerInstance.snapshot,
+                        refresh: claudeFailoverInstances[0]!.snapshot.refresh.pipe(
+                          Effect.tap(() => Effect.sync(() => unrelatedRefreshes++)),
+                        ),
+                      },
+                    },
+                  ]),
                 }
               : registry,
           ),
@@ -8919,6 +8933,17 @@ it.layer(
         assert.equal(after.thread.modelSelection.model, "opus");
         if (scenario === "available")
           assert.equal(after.runs[1]!.providerInstanceId, claudeFailoverInstances[1]!.instanceId);
+        if (scenario === "unavailable") {
+          assert.equal(unrelatedRefreshes, 0);
+          assert.equal(claudeRefreshes, 2);
+          yield* TestClock.adjust("5 seconds");
+          yield* sweep();
+          assert.equal(claudeRefreshes, 2);
+          yield* TestClock.adjust("1 minute");
+          yield* sweep();
+          assert.equal(claudeRefreshes, 4);
+          assert.equal(unrelatedRefreshes, 0);
+        }
       }),
   );
 });
