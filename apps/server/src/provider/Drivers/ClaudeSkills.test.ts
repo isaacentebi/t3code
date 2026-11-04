@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-import { discoverClaudeSkills } from "./ClaudeSkills.ts";
+import { discoverClaudeSkills, readClaudeSettingsEnv } from "./ClaudeSkills.ts";
 import { planClaudeSkillDispatch } from "./ClaudeSkillDispatch.ts";
 
 const writeSkill = Effect.fn(function* (
@@ -20,6 +20,24 @@ const writeSkill = Effect.fn(function* (
 });
 
 it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
+  it.effect("reads settings authentication overrides before checking subscription quota", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const configDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-claude-auth-settings-" });
+      const overrides = {
+        ANTHROPIC_AUTH_TOKEN: "test-gateway-token",
+        CLAUDE_CODE_OAUTH_TOKEN: "test-subscription-token",
+        CLAUDE_CODE_USE_BEDROCK: true,
+      };
+      yield* fs.writeFileString(
+        path.join(configDir, "settings.json"),
+        JSON.stringify({ env: overrides }),
+      );
+      const env = yield* readClaudeSettingsEnv({ homePath: configDir }, undefined, {});
+      assert.deepEqual(env, overrides);
+    }),
+  );
   it.effect("discovers enabled plugin skills with manifest names and ignores skill overrides", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -80,7 +98,9 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-claude-skills-" });
+      const tempDir = yield* fs.realPath(
+        yield* fs.makeTempDirectoryScoped({ prefix: "t3-claude-skills-" }),
+      );
       const configDir = path.join(tempDir, "claude-home");
       const workspace = path.join(tempDir, "workspace");
       const nestedWorkspace = path.join(workspace, "packages", "app");

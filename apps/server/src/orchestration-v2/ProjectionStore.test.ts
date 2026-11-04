@@ -5686,8 +5686,14 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
       yield* sql`UPDATE orchestration_v2_projection_threads
         SET payload_json = json_set(payload_json, '$.limitRecovery', json(${encodeUnknownJsonString(recovery)}))
         WHERE thread_id = ${threadId}`;
-      assert.isUndefined(
+      assert.deepEqual(
         (yield* store.getLimitRecoveryCandidates({ ...recoveryOptions, autoResume: true })).find(
+          (row) => row.id === threadId,
+        )?.limitRecovery,
+        recovery,
+      );
+      assert.isUndefined(
+        (yield* store.getLimitRecoveryCandidates(recoveryOptions)).find(
           (row) => row.id === threadId,
         ),
       );

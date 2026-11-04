@@ -6,6 +6,17 @@ const checkedAt = "2026-07-18T10:00:00.000Z";
 const noNames = { overageIncluded: undefined } as const;
 
 describe("claudeUsageResponseToLimits", () => {
+  it("does not invent a five-hour balance for null or absent session usage", () => {
+    const weekly = { utilization: 12, resets_at: null };
+    for (const rate_limits of [{ five_hour: null, seven_day: weekly }, { seven_day: weekly }]) {
+      const limits = claudeUsageResponseToLimits({
+        checkedAt,
+        response: { rate_limits_available: true, rate_limits },
+      }).limits;
+      expect(limits.windows.some((window) => window.id === "five_hour")).toBe(false);
+    }
+  });
+
   it("maps the session, weekly, and model-scoped weekly windows", () => {
     expect(
       claudeUsageResponseToLimits({

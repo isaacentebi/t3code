@@ -5,12 +5,17 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import type { OrchestrationV2DomainEvent } from "@t3tools/contracts";
 import * as DueHint from "../scheduling/DueHint.ts";
+import * as Option from "effect/Option";
+import * as ProviderInstances from "../provider/ProviderInstanceRegistry.ts";
+import { claudeAccountFailover, blockedClaudeAccounts } from "./claudeAccountFailover.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ThreadManagement from "./ThreadManagementService.ts";
+
+const FAILOVER_REFRESH_INTERVAL_MS = 60_000;
 
 const MAX_OVERDUE_ARM_MS = 24 * 60 * 60 * 1000;
 
@@ -19,6 +24,7 @@ export function limitRecoveryCommand(
   autoResume: boolean,
   nowMs: number,
   snooze = false,
+  target?: import("@t3tools/contracts").ModelSelection,
 ): OrchestrationV2Command | null {
   if (
     thread.status !== "failed" ||
@@ -56,7 +62,7 @@ export function limitRecoveryCommand(
   }
   if (
     !recovery.autoResume ||
-    resetMs > nowMs ||
+    (resetMs > nowMs && !target) ||
     (thread.snoozedUntil != null && DateTime.toEpochMillis(thread.snoozedUntil) > nowMs)
   )
     return null;
@@ -67,6 +73,7 @@ export function limitRecoveryCommand(
     messageId: MessageId.make(`limit-resume:${deliveryIdentity}`),
     threadId: thread.id,
     usageLimitContinuationOfRunId: thread.latestRunId,
+    ...(target ? { modelSelection: target } : {}),
     ...(recovery.requestId === undefined
       ? {}
       : { usageLimitRecoveryRequestId: recovery.requestId }),
@@ -87,18 +94,47 @@ const affectsLimitRecovery = (event: OrchestrationV2DomainEvent) =>
   event.type.startsWith("provider-session.") ||
   (event.type === "turn-item.updated" && event.payload.type === "error");
 
-const makeSweep = Effect.gen(function* () {
+/** @public Integration entry point; production registers the same sweep with Scheduler. */
+export const makeSweep = Effect.gen(function* () {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const threads = yield* ThreadManagement.ThreadManagementService;
   const orchestrator = yield* Orchestrator.OrchestratorV2;
   const settings = yield* ServerSettings.ServerSettingsService;
   const due = DueHint.make();
+  const lastRefreshAttempts = new Map<string, number>();
   yield* forkParked(
     Stream.runForEach(orchestrator.streamDomainEvents, (event) =>
       affectsLimitRecovery(event) ? due.invalidate : Effect.void,
     ),
   );
-  yield* forkParked(Stream.runForEach(settings.streamChanges, () => due.invalidate));
+  const invalidateAccounts = Effect.sync(() => lastRefreshAttempts.clear()).pipe(
+    Effect.andThen(due.invalidate),
+  );
+  yield* forkParked(Stream.runForEach(settings.streamChanges, () => invalidateAccounts));
+  const registry = yield* Effect.serviceOption(ProviderInstances.ProviderInstanceRegistry);
+  if (Option.isSome(registry)) {
+    // Authentication and fresh quota can make an account available before the failed account resets.
+    yield* forkParked(
+      Stream.make(undefined).pipe(
+        Stream.concat(registry.value.streamChanges),
+        Stream.tap(() => invalidateAccounts),
+        Stream.switchMap(() =>
+          Stream.fromEffect(registry.value.listInstances).pipe(
+            Stream.flatMap((instances) =>
+              Stream.mergeAll(
+                instances
+                  .filter((instance) => instance.driverKind === "claudeAgent" && instance.enabled)
+                  .map((instance) => instance.snapshot.streamChanges),
+                { concurrency: "unbounded" },
+              ),
+            ),
+          ),
+        ),
+        Stream.runForEach(() => due.invalidate),
+      ),
+    );
+  }
+
   return Effect.fn("UsageLimitRecoveryWorker.sweep")(function* () {
     const now = yield* DateTime.now;
     const nowMs = DateTime.toEpochMillis(now);
@@ -111,12 +147,65 @@ const makeSweep = Effect.gen(function* () {
       snooze: preferences.snoozeLimitedThreads,
     });
     let acted = false;
+    let providersForFailover: readonly import("@t3tools/contracts").ServerProvider[] | undefined;
+    let nextFailoverRefreshAt = Infinity;
     for (const thread of candidates) {
+      let target: import("@t3tools/contracts").ModelSelection | undefined;
+      if (
+        preferences.autoResumeLimitedThreads &&
+        Option.isSome(registry) &&
+        thread.limitRecovery?.autoResume &&
+        thread.usageLimitResetAt != null &&
+        Date.parse(thread.usageLimitResetAt) > nowMs
+      ) {
+        const projection = yield* projections.getThreadRecords(thread.id, ["runs", "turnItems"]);
+        const instances = yield* registry.value.listInstances;
+        const source = instances.find(
+          (instance) => instance.instanceId === projection.thread.modelSelection.instanceId,
+        );
+        if (source?.driverKind === "claudeAgent" && source.enabled) {
+          providersForFailover ??= yield* Effect.forEach(
+            instances.filter(
+              (instance) => instance.driverKind === "claudeAgent" && instance.enabled,
+            ),
+            (instance) =>
+              Effect.gen(function* () {
+                const snapshot = yield* instance.snapshot.getSnapshot;
+                const measuredAt = Date.parse(snapshot.usageLimits?.checkedAt ?? "");
+                const lastRead = Math.max(
+                  lastRefreshAttempts.get(instance.instanceId) ?? -Infinity,
+                  Number.isFinite(measuredAt) && measuredAt <= nowMs ? measuredAt : -Infinity,
+                );
+                const refreshAt = lastRead + FAILOVER_REFRESH_INTERVAL_MS;
+                if (refreshAt > nowMs) {
+                  nextFailoverRefreshAt = Math.min(nextFailoverRefreshAt, refreshAt);
+                  return snapshot;
+                }
+                lastRefreshAttempts.set(instance.instanceId, nowMs);
+                nextFailoverRefreshAt = Math.min(
+                  nextFailoverRefreshAt,
+                  nowMs + FAILOVER_REFRESH_INTERVAL_MS,
+                );
+                return yield* instance.snapshot.refresh;
+              }),
+            { concurrency: 2 },
+          );
+          const measuredAt = DateTime.toEpochMillis(yield* DateTime.now);
+          target =
+            claudeAccountFailover(
+              projection.thread.modelSelection,
+              providersForFailover,
+              measuredAt,
+              blockedClaudeAccounts(projection, nowMs),
+            ) ?? undefined;
+        }
+      }
       const command = limitRecoveryCommand(
         thread,
         preferences.autoResumeLimitedThreads,
         nowMs,
         preferences.snoozeLimitedThreads,
+        target,
       );
       if (command === null) continue;
       acted = true;
@@ -142,7 +231,7 @@ const makeSweep = Effect.gen(function* () {
     // A sweep that acted, or failed to, re-checks on the next tick.
     if (acted) return;
     const wakeAt = yield* projections.getLimitRecoveryWakeAt(now);
-    yield* due.record(readVersion, wakeAt ?? Infinity, nowMs);
+    yield* due.record(readVersion, Math.min(wakeAt ?? Infinity, nextFailoverRefreshAt), nowMs);
   });
 });
 

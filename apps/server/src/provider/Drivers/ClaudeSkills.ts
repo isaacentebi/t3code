@@ -435,12 +435,19 @@ const resolveClaudeConfigDirPath = Effect.fn("resolveClaudeConfigDirPath")(funct
 
 const SettingsEnv = Schema.Struct({
   ANTHROPIC_BASE_URL: Schema.optional(Schema.String),
+  ANTHROPIC_API_KEY: Schema.optional(Schema.String),
+  ANTHROPIC_AUTH_TOKEN: Schema.optional(Schema.String),
+  CLAUDE_CODE_OAUTH_TOKEN: Schema.optional(Schema.String),
+  CLAUDE_SECURESTORAGE_CONFIG_DIR: Schema.optional(Schema.String),
+  CLAUDE_CODE_USE_BEDROCK: Schema.optional(Schema.Unknown),
+  CLAUDE_CODE_USE_VERTEX: Schema.optional(Schema.Unknown),
+  CLAUDE_CODE_USE_FOUNDRY: Schema.optional(Schema.Unknown),
   CLAUDE_CODE_ENTRYPOINT: Schema.optional(Schema.String),
   // Unquoted JSON values must not fail the decode and drop ANTHROPIC_BASE_URL with them.
   CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: Schema.optional(Schema.Unknown),
   CLAUDE_CODE_GATEWAY_MODEL_DISCOVERY_TIMEOUT_MS: Schema.optional(Schema.Unknown),
 });
-const decodeSettingsEnv = Schema.decodeUnknownEffect(
+const decodeSettingsEnv = Schema.decodeUnknownOption(
   fromLenientJson(Schema.Struct({ env: Schema.optional(SettingsEnv) })),
 );
 
@@ -466,7 +473,7 @@ export const readClaudeSettingsEnv = Effect.fn("readClaudeSettingsEnv")(function
       .readFileString(settingsPath)
       .pipe(Effect.orElseSucceed(() => undefined));
     if (contents === undefined) continue;
-    const parsed = yield* decodeSettingsEnv(contents).pipe(Effect.orElseSucceed(() => undefined));
+    const parsed = Option.getOrUndefined(decodeSettingsEnv(contents));
     Object.assign(settingsEnv, parsed?.env);
   }
   return settingsEnv;

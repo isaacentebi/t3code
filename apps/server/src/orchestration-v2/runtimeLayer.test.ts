@@ -1,6 +1,6 @@
 import { PullRequestProviderError } from "@t3tools/source-control-core/server/PullRequestProvider";
 import { SourceControlProviderKind } from "@t3tools/contracts";
-import { limitRecoveryCommand } from "./UsageLimitRecoveryWorker.ts";
+import { limitRecoveryCommand, makeSweep } from "./UsageLimitRecoveryWorker.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
@@ -290,27 +290,32 @@ const layerProjectionReplayTest = ProjectionReplay.layer.pipe(
   ),
 );
 
-const layerTest = Layer.mergeAll(
-  RuntimeLayer.layer,
-  layerProjectionReplayTest,
-  RuntimeLayer.layerEventSink,
-  ProjectStore.layer,
-  ProjectionStore.layer,
-  EffectOutbox.layer,
-  ThreadCommandExecutor.layer,
-).pipe(
-  Layer.provide(McpSessionRegistryTestkit.layer),
-  Layer.provide(McpProviderSessions.layer),
-  Layer.provide(SqlitePersistence.layerMemory),
-  Layer.provide(layerCheckpointStoreTest),
-  Layer.provide(layerServerConfig),
-  Layer.provide(ServerSettings.layerTest()),
-  Layer.provide(layerTestProviderInstanceRegistry),
-  Layer.provide(layerGitWorkflowTest),
-  Layer.provide(layerProjectServiceTest),
-  Layer.provide(layerPlatformTest),
-);
+const layerTestWithRegistry = (
+  registry: typeof layerTestProviderInstanceRegistry,
+  settings = ServerSettings.layerTest(),
+) =>
+  Layer.mergeAll(
+    RuntimeLayer.layer,
+    layerProjectionReplayTest,
+    RuntimeLayer.layerEventSink,
+    ProjectStore.layer,
+    ProjectionStore.layer,
+    EffectOutbox.layer,
+    ThreadCommandExecutor.layer,
+  ).pipe(
+    Layer.provide(McpSessionRegistryTestkit.layer),
+    Layer.provide(McpProviderSessions.layer),
+    Layer.provide(SqlitePersistence.layerMemory),
+    Layer.provide(layerCheckpointStoreTest),
+    Layer.provide(layerServerConfig),
+    Layer.provide(settings),
+    Layer.provide(registry),
+    Layer.provide(layerGitWorkflowTest),
+    Layer.provide(layerProjectServiceTest),
+    Layer.provide(layerPlatformTest),
+  );
 
+const layerTest = layerTestWithRegistry(layerTestProviderInstanceRegistry);
 const layerLegacyImportTest = Layer.merge(RuntimeLayer.layer, layerProjectionReplayTest).pipe(
   Layer.provide(McpSessionRegistryTestkit.layer),
   Layer.provide(McpProviderSessions.layer),
@@ -8676,3 +8681,269 @@ it.layer(layerQueueResumeDisabledInstanceTest)(
     );
   },
 );
+
+const claudeFailoverInstances = ["primary", "secondary"].map((id) => {
+  const instanceId = ProviderInstanceId.make(`claude-${id}`);
+  const snapshot = Effect.gen(function* () {
+    const checkedAt = DateTime.formatIso(yield* DateTime.now);
+    return {
+      instanceId,
+      driver: ProviderDriverKind.make("claudeAgent"),
+      enabled: true,
+      installed: true,
+      version: null,
+      status: "ready" as const,
+      checkedAt,
+      auth: {
+        status: "authenticated" as const,
+        type: "subscription",
+        email: `${id}@example.com`,
+        workspaceId: id,
+      },
+      models: [{ slug: "opus", name: "Opus", isCustom: false, capabilities: null }],
+      slashCommands: [],
+      skills: [],
+      usageLimits: {
+        checkedAt,
+        windows: [
+          {
+            id: "five_hour",
+            kind: "session" as const,
+            label: "Session",
+            usedPercent: id === "primary" ? 100 : 0,
+          },
+          { id: "seven_day", kind: "weekly" as const, label: "Weekly", usedPercent: 0 },
+        ],
+      },
+    };
+  });
+  return {
+    ...providerInstance,
+    instanceId,
+    driverKind: ProviderDriverKind.make("claudeAgent"),
+    continuationIdentity: {
+      driverKind: ProviderDriverKind.make("claudeAgent"),
+      continuationKey: `claude:${id}`,
+    },
+    snapshot: {
+      ...providerInstance.snapshot,
+      getSnapshot: snapshot,
+      refresh: snapshot,
+      streamChanges: Stream.empty,
+    },
+    orchestrationAdapter: {
+      ...orchestrationAdapter,
+      instanceId,
+      driver: ProviderDriverKind.make("claudeAgent"),
+    },
+  } satisfies ProviderInstance;
+});
+const layerClaudeFailoverRegistry = Layer.succeed(
+  ProviderInstanceRegistry.ProviderInstanceRegistry,
+  {
+    getInstance: (id) =>
+      Effect.succeed(claudeFailoverInstances.find((instance) => instance.instanceId === id)),
+    listInstances: Effect.succeed(claudeFailoverInstances),
+    listUnavailable: Effect.succeed([]),
+    streamChanges: Stream.empty,
+    subscribeChanges: Effect.never,
+  },
+);
+const layerClaudeFailoverSettings = ServerSettings.layerTest({
+  autoResumeLimitedThreads: true,
+  providerInstances: {
+    [claudeFailoverInstances[0]!.instanceId]: {
+      driver: ProviderDriverKind.make("claudeAgent"),
+      enabled: true,
+      config: {},
+    },
+    [claudeFailoverInstances[1]!.instanceId]: {
+      driver: ProviderDriverKind.make("claudeAgent"),
+      enabled: true,
+      config: {},
+    },
+  },
+});
+it.layer(
+  Layer.mergeAll(
+    layerTestWithRegistry(layerClaudeFailoverRegistry, layerClaudeFailoverSettings),
+    layerClaudeFailoverRegistry,
+    layerClaudeFailoverSettings,
+  ),
+)("Claude account recovery", (it) => {
+  it.effect.each(["available", "stopped", "unavailable"] as const)(
+    "handles a future-reset limited thread with %s recovery",
+    (scenario) =>
+      Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const events = yield* EventSink.EventSinkV2;
+        const projectId = ProjectId.make(`claude-failover-project:${scenario}`);
+        const threadId = ThreadId.make(`claude-failover:${scenario}`);
+        const selection = {
+          instanceId: claudeFailoverInstances[0]!.instanceId,
+          model: "opus",
+        } satisfies ModelSelection;
+        const now = yield* DateTime.now;
+        yield* seedProject({
+          projectId,
+          title: "Account recovery",
+          workspaceRoot: process.cwd(),
+          defaultModelSelection: selection,
+          createdAt: DateTime.formatIso(now),
+        });
+        yield* orchestrator.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make(`${threadId}:create`),
+          threadId,
+          projectId,
+          title: "Limited Claude",
+          modelSelection: selection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdBy: "user",
+          creationSource: "web",
+        });
+        yield* orchestrator.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make(`${threadId}:send`),
+          threadId,
+          messageId: MessageId.make(`${threadId}:message`),
+          text: "Continue the task",
+          attachments: [],
+          dispatchMode: { type: "defer_start" },
+          createdBy: "user",
+          creationSource: "web",
+        });
+        const source = (yield* orchestrator.getThreadProjection(threadId)).runs[0]!;
+        const resetAt = DateTime.formatIso(DateTime.add(now, { hours: 5 }));
+        yield* events.write({
+          events: [
+            {
+              id: EventId.make(`${threadId}:failed`),
+              type: "run.updated",
+              threadId,
+              occurredAt: now,
+              payload: { ...source, status: "failed", completedAt: now },
+            },
+            {
+              id: EventId.make(`${threadId}:limit`),
+              type: "turn-item.updated",
+              threadId,
+              occurredAt: now,
+              payload: {
+                id: TurnItemId.make(`${threadId}:limit`),
+                type: "error",
+                threadId,
+                runId: source.id,
+                nodeId: source.rootNodeId,
+                providerThreadId: null,
+                providerTurnId: null,
+                nativeItemRef: null,
+                parentItemId: null,
+                ordinal: 2,
+                status: "failed",
+                title: "Limit reached",
+                startedAt: now,
+                completedAt: now,
+                updatedAt: now,
+                failure: {
+                  class: "usage_limit",
+                  message: "Subscription limit reached",
+                  code: "usageLimitExceeded",
+                  retryable: null,
+                  resetAt,
+                },
+              },
+            },
+          ],
+        });
+        const registry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
+        let claudeRefreshes = 0;
+        let unrelatedRefreshes = 0;
+        const sweep = yield* makeSweep.pipe(
+          Effect.provideService(
+            ProviderInstanceRegistry.ProviderInstanceRegistry,
+            scenario === "unavailable"
+              ? {
+                  ...registry,
+                  listInstances: Effect.succeed([
+                    ...claudeFailoverInstances.map((instance, index) => ({
+                      ...instance,
+                      snapshot: {
+                        ...instance.snapshot,
+                        getSnapshot: Effect.map(instance.snapshot.getSnapshot, (snapshot) => ({
+                          ...snapshot,
+                          usageLimits: undefined,
+                        })),
+                        refresh: instance.snapshot.refresh.pipe(
+                          Effect.tap(() => Effect.sync(() => claudeRefreshes++)),
+                          Effect.map((snapshot) => ({
+                            ...snapshot,
+                            ...(index === 0 ? {} : { usageLimits: undefined }),
+                          })),
+                        ),
+                      },
+                    })),
+                    {
+                      ...providerInstance,
+                      snapshot: {
+                        ...providerInstance.snapshot,
+                        refresh: claudeFailoverInstances[0]!.snapshot.refresh.pipe(
+                          Effect.tap(() => Effect.sync(() => unrelatedRefreshes++)),
+                        ),
+                      },
+                    },
+                  ]),
+                }
+              : registry,
+          ),
+        );
+        yield* sweep(); // Persist the automatic recovery intent first.
+        assert.isTrue(
+          (yield* orchestrator.getThreadProjection(threadId)).thread.limitRecovery?.autoResume,
+          "recovery intent armed",
+        );
+        const candidates =
+          yield* (yield* ProjectionStore.ProjectionStoreV2).getLimitRecoveryCandidates({
+            now,
+            autoResume: true,
+            snooze: false,
+          });
+        assert.include(
+          candidates.map((candidate) => candidate.id),
+          threadId,
+          "armed future-reset candidate visible",
+        );
+        if (scenario === "stopped")
+          yield* orchestrator.dispatch({
+            type: "thread.stop",
+            commandId: CommandId.make(`${threadId}:stop`),
+            threadId,
+          });
+        yield* sweep();
+        yield* sweep();
+        const after = yield* orchestrator.getThreadProjection(threadId);
+        assert.lengthOf(after.runs, scenario === "available" ? 2 : 1);
+        assert.equal(
+          after.thread.modelSelection.instanceId,
+          scenario === "available" ? claudeFailoverInstances[1]!.instanceId : selection.instanceId,
+        );
+        assert.equal(after.thread.modelSelection.model, "opus");
+        if (scenario === "available")
+          assert.equal(after.runs[1]!.providerInstanceId, claudeFailoverInstances[1]!.instanceId);
+        if (scenario === "unavailable") {
+          assert.equal(unrelatedRefreshes, 0);
+          assert.equal(claudeRefreshes, 2);
+          yield* TestClock.adjust("5 seconds");
+          yield* sweep();
+          assert.equal(claudeRefreshes, 2);
+          yield* TestClock.adjust("1 minute");
+          yield* sweep();
+          assert.equal(claudeRefreshes, 4);
+          assert.equal(unrelatedRefreshes, 0);
+        }
+      }),
+  );
+});

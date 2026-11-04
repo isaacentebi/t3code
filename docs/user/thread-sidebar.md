@@ -255,6 +255,9 @@ usage limits** in **Settings → Threads** to schedule limit stops by default.
 The environment must be running when the reset arrives; it resumes overdue
 continuations after a restart. Stopping the thread, sending a new message,
 archiving, or settling it prevents a pending continuation from starting.
+For Claude, **Resume after usage limits** also tries another configured subscription account
+before the reset when it has fresh available quota for the same model. Each account needs its own
+Claude home directory. If no account is available, the conversation waits for its reset.
 
 Choose **Snooze until reset** to hide the thread until its allowance returns.
 Snooze and auto-resume are independent: snooze alone wakes the thread without

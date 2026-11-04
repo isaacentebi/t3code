@@ -112,10 +112,10 @@ describe("resolveUsageLimitsAfterProbe", () => {
     expect(resolveUsageLimitsAfterProbe({ published: live, probed: newer })).toEqual(newer);
   });
 
-  it("keeps the last good windows through a failed probe but not an unsupported one", () => {
+  it("publishes unavailable limits after a failed probe instead of showing the old balance", () => {
     const failed = { checkedAt, windows: [], unavailable: { reason: "probeFailed" as const } };
     const unsupported = { checkedAt, windows: [], unavailable: { reason: "unsupported" as const } };
-    expect(resolveUsageLimitsAfterProbe({ published, probed: failed })).toBe(published);
+    expect(resolveUsageLimitsAfterProbe({ published, probed: failed })).toBe(failed);
     expect(resolveUsageLimitsAfterProbe({ published, probed: unsupported })).toBe(unsupported);
     expect(resolveUsageLimitsAfterProbe({ published: undefined, probed: failed })).toBe(failed);
   });
