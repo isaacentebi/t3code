@@ -9,6 +9,9 @@ import * as Tracer from "effect/Tracer";
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import { HttpClient, HttpClientResponse } from "effect/http";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Exercise the captured Keychain subprocess boundary.
+import * as NodeChildProcess from "node:child_process";
+import { vi } from "vite-plus/test";
 
 import {
   ClaudeCredentialKeychain,
@@ -16,6 +19,45 @@ import {
   readClaudeAuthenticatedIdentity,
 } from "./claudeAuthenticatedIdentity.ts";
 import type { ClaudeCapabilitiesProbe } from "./ClaudeProvider.ts";
+
+vi.mock("node:child_process", { spy: true });
+
+it.effect("captures the macOS credential command and only treats a missing entry as absent", () =>
+  Effect.gen(function* () {
+    const readKeychain = yield* ClaudeCredentialKeychain;
+    using probe = vi.spyOn(NodeChildProcess, "execFile");
+    probe.mockImplementation((_file, _args, _options, callback) => {
+      if (typeof callback !== "function") throw new Error("Expected captured callback");
+      callback(null, "credential-document\n", "");
+      return {} as NodeChildProcess.ChildProcess;
+    });
+    assert.equal(
+      yield* Effect.promise(() => readKeychain("service", "user")),
+      "credential-document",
+    );
+    assert.deepEqual(probe.mock.calls[0]?.slice(0, 3), [
+      "/usr/bin/security",
+      ["find-generic-password", "-a", "user", "-w", "-s", "service"],
+      { encoding: "utf8", timeout: 5_000, maxBuffer: 256 * 1024 },
+    ]);
+    for (const code of [44, 36, "ETIMEDOUT"]) {
+      probe.mockImplementation((_file, _args, _options, callback) => {
+        if (typeof callback !== "function") throw new Error("Expected captured callback");
+        callback(Object.assign(new Error("sensitive process error"), { code }), "secret", "secret");
+        return {} as NodeChildProcess.ChildProcess;
+      });
+      const result = yield* Effect.tryPromise(() => readKeychain("service", "user")).pipe(
+        Effect.exit,
+      );
+      if (code === 44) assert.deepEqual(result, Exit.succeed(undefined));
+      else {
+        assert.isTrue(Exit.isFailure(result));
+        assert.notInclude(JSON.stringify(result), "secret");
+        assert.notInclude(JSON.stringify(result), "sensitive process error");
+      }
+    }
+  }),
+);
 
 const freshUsage: NonNullable<ClaudeCapabilitiesProbe["usage"]> = {
   rate_limits_available: true,
