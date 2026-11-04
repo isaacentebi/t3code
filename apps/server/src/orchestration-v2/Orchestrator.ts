@@ -1,3 +1,5 @@
+import * as FailoverProviderInstances from "../provider/ProviderInstanceRegistry.ts";
+import { claudeAccountFailover, blockedClaudeAccounts } from "./claudeAccountFailover.ts";
 import type {
   GuestShareId,
   OrchestrationV2SearchThreadInput,
@@ -5494,6 +5496,31 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       const failure = latestRootProviderFailure(run, projection.turnItems);
       const recovery = projection.thread.limitRecovery;
       const now = yield* DateTime.now;
+      let accountFailover = false;
+      if (
+        command.modelSelection &&
+        command.modelSelection.instanceId !== projection.thread.modelSelection.instanceId
+      ) {
+        const registry = yield* Effect.serviceOption(
+          FailoverProviderInstances.ProviderInstanceRegistry,
+        );
+        if (Option.isSome(registry)) {
+          const instances = yield* registry.value.listInstances;
+          const providers = yield* Effect.forEach(
+            instances,
+            (instance) => instance.snapshot.getSnapshot,
+          );
+          const target = claudeAccountFailover(
+            projection.thread.modelSelection,
+            providers,
+            DateTime.toEpochMillis(now),
+            blockedClaudeAccounts(projection, DateTime.toEpochMillis(now)),
+          );
+          accountFailover =
+            target?.instanceId === command.modelSelection.instanceId &&
+            target.model === command.modelSelection.model;
+        }
+      }
       if (
         run?.id !== command.usageLimitContinuationOfRunId ||
         failure?.class !== "usage_limit" ||
@@ -5502,7 +5529,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         recovery.requestId !== command.usageLimitRecoveryRequestId ||
         recovery.runId !== run.id ||
         recovery.resetAt !== failure.resetAt ||
-        Date.parse(recovery.resetAt) > DateTime.toEpochMillis(now) ||
+        (!accountFailover && Date.parse(recovery.resetAt) > DateTime.toEpochMillis(now)) ||
         projection.thread.archivedAt !== null ||
         projection.thread.deletedAt !== null ||
         projection.thread.settledOverride === "settled" ||

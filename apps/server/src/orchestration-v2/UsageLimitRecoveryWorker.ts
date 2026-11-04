@@ -5,6 +5,9 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import type { OrchestrationV2DomainEvent } from "@t3tools/contracts";
 import * as DueHint from "../scheduling/DueHint.ts";
+import * as Option from "effect/Option";
+import * as ProviderInstances from "../provider/ProviderInstanceRegistry.ts";
+import { claudeAccountFailover, blockedClaudeAccounts } from "./claudeAccountFailover.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -19,6 +22,7 @@ export function limitRecoveryCommand(
   autoResume: boolean,
   nowMs: number,
   snooze = false,
+  target?: import("@t3tools/contracts").ModelSelection,
 ): OrchestrationV2Command | null {
   if (
     thread.status !== "failed" ||
@@ -56,7 +60,7 @@ export function limitRecoveryCommand(
   }
   if (
     !recovery.autoResume ||
-    resetMs > nowMs ||
+    (resetMs > nowMs && !target) ||
     (thread.snoozedUntil != null && DateTime.toEpochMillis(thread.snoozedUntil) > nowMs)
   )
     return null;
@@ -67,6 +71,7 @@ export function limitRecoveryCommand(
     messageId: MessageId.make(`limit-resume:${deliveryIdentity}`),
     threadId: thread.id,
     usageLimitContinuationOfRunId: thread.latestRunId,
+    ...(target ? { modelSelection: target } : {}),
     ...(recovery.requestId === undefined
       ? {}
       : { usageLimitRecoveryRequestId: recovery.requestId }),
@@ -99,6 +104,28 @@ const makeSweep = Effect.gen(function* () {
     ),
   );
   yield* forkParked(Stream.runForEach(settings.streamChanges, () => due.invalidate));
+  const registry = yield* Effect.serviceOption(ProviderInstances.ProviderInstanceRegistry);
+  if (Option.isSome(registry)) {
+    // Authentication and fresh quota can make an account available before the failed account resets.
+    yield* forkParked(
+      Stream.make(undefined).pipe(
+        Stream.concat(registry.value.streamChanges),
+        Stream.tap(() => due.invalidate),
+        Stream.switchMap(() =>
+          Stream.fromEffect(registry.value.listInstances).pipe(
+            Stream.flatMap((instances) =>
+              Stream.mergeAll(
+                instances.map((instance) => instance.snapshot.streamChanges),
+                { concurrency: "unbounded" },
+              ),
+            ),
+          ),
+        ),
+        Stream.runForEach(() => due.invalidate),
+      ),
+    );
+  }
+
   return Effect.fn("UsageLimitRecoveryWorker.sweep")(function* () {
     const now = yield* DateTime.now;
     const nowMs = DateTime.toEpochMillis(now);
@@ -112,11 +139,36 @@ const makeSweep = Effect.gen(function* () {
     });
     let acted = false;
     for (const thread of candidates) {
+      let target: import("@t3tools/contracts").ModelSelection | undefined;
+      if (
+        preferences.autoResumeLimitedThreads &&
+        Option.isSome(registry) &&
+        thread.limitRecovery?.autoResume &&
+        thread.usageLimitResetAt !== null &&
+        Date.parse(thread.usageLimitResetAt) > nowMs
+      ) {
+        const projection = yield* projections.getThreadRecords(thread.id, ["runs", "turnItems"]);
+        const instances = yield* registry.value.listInstances;
+        const providers = yield* Effect.forEach(
+          instances,
+          (instance) => instance.snapshot.refresh,
+          { concurrency: 2 },
+        );
+        const measuredAt = DateTime.toEpochMillis(yield* DateTime.now);
+        target =
+          claudeAccountFailover(
+            projection.thread.modelSelection,
+            providers,
+            measuredAt,
+            blockedClaudeAccounts(projection, nowMs),
+          ) ?? undefined;
+      }
       const command = limitRecoveryCommand(
         thread,
         preferences.autoResumeLimitedThreads,
         nowMs,
         preferences.snoozeLimitedThreads,
+        target,
       );
       if (command === null) continue;
       acted = true;

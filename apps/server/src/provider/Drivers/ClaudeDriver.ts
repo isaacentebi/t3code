@@ -3,7 +3,6 @@ import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
@@ -25,13 +24,16 @@ import { ProviderDriverError } from "../Errors.ts";
 import { claudeUsageReader } from "./claudeUsage.ts";
 import { makeClaudeScopedLimitNames } from "../claudeUsageLimits.ts";
 import * as ClaudeResetCredits from "../claudeResetCredits.ts";
+import {
+  bindClaudeUsageIdentity,
+  readClaudeAuthenticatedIdentity,
+} from "../claudeAuthenticatedIdentity.ts";
 import * as ResetCreditCoordinator from "../resetCreditCoordinator.ts";
 import {
   checkClaudeProviderStatus,
   makePendingClaudeProvider,
   probeClaudeCapabilities,
   probeClaudeWorkspaceSnapshot,
-  type ClaudeCapabilitiesProbe,
 } from "../ClaudeProvider.ts";
 import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
 import * as ModelCatalog from "@t3tools/provider-core/server/ModelCatalog";
@@ -61,11 +63,6 @@ const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 const DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
 const CAPABILITIES_PROBE_TTL = Duration.minutes(5);
 
-const withoutUsage = (capabilities: ClaudeCapabilitiesProbe): ClaudeCapabilitiesProbe => {
-  const result = { ...capabilities };
-  delete result.usage;
-  return result;
-};
 
 export type ClaudeDriverEnv =
   | ClaudeAdapterV2DriverEnv
@@ -173,63 +170,37 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       modelCatalog,
     );
 
-    // Per-instance capabilities cache: keyed on binary + resolved HOME so
-    // account-specific probes never share auth metadata across instances.
-    // A transient miss may reuse the last account once, but its usage windows keep their age.
-    const lastGoodCapabilities = yield* Ref.make<ClaudeCapabilitiesProbe | undefined>(undefined);
+    // Verify the live credential on every refresh; a config path is not an account identity.
     const capabilitiesProbeCache = yield* Cache.makeWith(
-      () =>
+      (_key: string) =>
         probeClaudeCapabilities(effectiveConfig, processEnv, stateDir).pipe(
-          Effect.flatMap((capabilities) =>
-            ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath).pipe(
-              Effect.map((workspaceId) => ({
-                _tag: "fresh" as const,
-                capabilities:
-                  workspaceId === undefined ? capabilities : { ...capabilities, workspaceId },
-              })),
-            ),
-          ),
-          Effect.tap(({ capabilities }) => Ref.set(lastGoodCapabilities, capabilities)),
-          Effect.catch((error) =>
-            Ref.getAndSet(lastGoodCapabilities, undefined).pipe(
-              Effect.flatMap((capabilities) =>
-                capabilities === undefined
-                  ? Effect.fail(error)
-                  : ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath).pipe(
-                      Effect.flatMap((workspaceId) =>
-                        workspaceId === capabilities.workspaceId
-                          ? Effect.succeed({
-                              _tag: "fallback" as const,
-                              capabilities: withoutUsage(capabilities),
-                            })
-                          : Effect.fail(error),
-                      ),
-                    ),
-              ),
-            ),
-          ),
           Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(Path.Path, path),
         ),
-      {
-        capacity: 1,
-        timeToLive: (exit) =>
-          // Only fresh usage earns the TTL; failures, fallbacks and usage-less probes retry.
-          Exit.isSuccess(exit) &&
-          exit.value._tag === "fresh" &&
-          exit.value.capabilities.usage !== undefined
-            ? CAPABILITIES_PROBE_TTL
-            : Duration.zero,
-      },
+      { capacity: 1, timeToLive: () => CAPABILITIES_PROBE_TTL },
     );
     const capabilitiesCacheKey = yield* makeClaudeCapabilitiesCacheKey(
       effectiveConfig,
       stateDir,
       processEnv,
     );
-    const resolveCapabilities = Cache.get(capabilitiesProbeCache, capabilitiesCacheKey).pipe(
-      Effect.map((result) => result.capabilities),
-    );
+    const resolveCapabilities = Effect.gen(function* () {
+      const identity = yield* readClaudeAuthenticatedIdentity(configDir, {
+        ...processEnv,
+        ...(effectiveConfig.homePath.trim() ? { CLAUDE_CONFIG_DIR: configDir } : {}),
+      }).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+      );
+      const capabilities = yield* Cache.get(
+        capabilitiesProbeCache,
+        `${capabilitiesCacheKey}\0${identity?.credentialFingerprint ?? "unverified"}`,
+      );
+      const bound = bindClaudeUsageIdentity(capabilities, identity);
+      if (!bound.usage) yield* Cache.invalidateAll(capabilitiesProbeCache);
+      return bound;
+    });
 
     const checkProvider = catalogService.refreshInBackground.pipe(
       Effect.andThen(
