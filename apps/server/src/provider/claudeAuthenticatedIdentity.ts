@@ -1,7 +1,8 @@
 import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Hex from "effect/encoding/Hex";
-import * as NodeModule from "node:module";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Capture credential stdout without process tracing.
+import * as NodeChildProcess from "node:child_process";
 
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
@@ -14,17 +15,23 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import type { ClaudeCapabilitiesProbe } from "./ClaudeProvider.ts";
 
-const requireForKeyring = NodeModule.createRequire(import.meta.url);
-
 export const ClaudeCredentialKeychain = Context.Reference<
   (service: string, username: string) => Promise<string | null | undefined>
 >("t3/ClaudeCredentialKeychain", {
-  defaultValue: () => async (service, username) => {
-    const { AsyncEntry } = requireForKeyring(
-      "@napi-rs/keyring",
-    ) as typeof import("@napi-rs/keyring");
-    return new AsyncEntry(service, username).getPassword();
-  },
+  defaultValue: () => (service, username) =>
+    new Promise((resolve, reject) => {
+      // The native keyring worker can hang beyond Effect cancellation on macOS.
+      NodeChildProcess.execFile(
+        "/usr/bin/security",
+        ["find-generic-password", "-a", username, "-w", "-s", service],
+        { encoding: "utf8", timeout: 5_000, maxBuffer: 256 * 1024 },
+        (error, stdout) => {
+          if (error?.code === 44) resolve(undefined);
+          else if (error) reject(new Error("Claude Keychain credential read failed"));
+          else resolve(stdout.trim());
+        },
+      );
+    }),
 });
 const Credentials = Schema.fromJsonString(
   Schema.Struct({
